@@ -38,6 +38,7 @@ function [T,Q,nLanczos] = lanczos_prop(H,r0,maxiter,dt,tol)
             [V,D] = eig(T(1:j,1:j));
             matexp = V*expm(-1i*dt*D)*V';
             residual = abs(dt*beta(j)*matexp(j,1)*nrm);
+            disp(['residual(', num2str(j), '): ', num2str(residual)]);
             if residual < tol
                 break;
             end

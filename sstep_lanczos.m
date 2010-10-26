@@ -175,18 +175,6 @@ function [T,Q]= sStepLanczos(H,psi,s,m)
         kx = (k-1)*s;
         Q(:,kx+1:kx+s) = V{k+1};
     end
-
-%    [V2,D2]=eig(T);
-
-%    D=D1;
-%    D=D2;
-
-%    psi = Q*V1*expm(-1i*dt*D)*V1'*Q'*eye(iter,1)*norm(psi);
-%    psi = v*(V2*(expm(-1i*dt*D2)*(V2\(norm(psi)*eye(iter,1)))));
-    
-    
-%    eig_vals = diag(D);
-%    l_vects = Q;
 end
 
 
