@@ -1,26 +1,13 @@
-function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,opt)
-    
-    % Set default values for options
-    may_break  = 0;
-    do_reorth  = 0;
-    do_restart = 0;
-    
-    % Check options and set values accordingly
-    if nargin == 5
-        if isfield(opt,'break') && (opt.break == 0 || opt.break == 1)
-            may_break = opt.break;
-        end
-        if isfield(opt,'reorth') && (opt.reorth == 0 || opt.reorth == 1)
-            % currently not implemented for CA-Lanczos
-            do_reorth = opt.reorth;
-        end
-        if isfield(opt,'restart') && (opt.restart == 0 || opt.restart == 1) 
-            % currently not implemented
-            do_restart = opt.restart;
-        end
-    end
+function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
 
-    if (do_reorth == 1) || (do_restart == 1) || (may_break == 1) || (nargout > 2)
+    if nargin < 5
+        may_break = 0;
+    end
+    if nargin < 6
+        reorth = 0;
+    end
+    
+    if (nargout >= 3) || (nargin >= 5)
         solve_eigs_every_step = 1;
     else
         solve_eigs_every_step = 0;
@@ -28,26 +15,44 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,opt)
 
     t = ceil(t);             % To make sure that t is an integer
     maxlanczos = s*t;
-
+    
     n = length(r);
     b = zeros(s+1,1);
     V = zeros(n,maxlanczos+1);
     Q = zeros(n,maxlanczos+1);
     rnorm = zeros(t,2);
     orth = zeros(t,1);
-
+    
     b0 = norm(r);
     Q(:,1) = (1/b0)*r;
     V(:,1) = Q(:,1);
     
-    for k = 0:t-1
+    has_converged = false;
+    k = 0;
     
-        % Fix basis vectors (first attempt: Monomial basis)
+    % Fix basis vectors
+    if strcmpi(basis,'monomial')
         I = eye(s+1);
         Bk = I(:,2:s+1);        
-               
+    elseif strcmpi(basis,'newton')
+        % Run standard Lanczos for 2s steps
+        T = lanczos(A,r,2*s);
+        basis_eigs = eig(T);
+        basis_shifts = leja(basis_eigs,'modified');
+        Bk = newton_basis_matrix(basis_shifts, s,1);
+    else
+        disp(['ERROR: Unknown basis', basis]);
+    end
+    
+  
+    while (k < t) && (has_converged == false)
+    
         % Compute matrix powers
-        V(:,s*k+2:s*(k+1)+1) = matrix_powers(A, Q(:,s*k+1), s);
+        if strcmpi(basis,'monomial')
+            V(:,s*k+2:s*(k+1)+1) = matrix_powers(A, Q(:,s*k+1), s);
+        elseif strcmpi(basis,'newton')
+            V(:,s*k+1:s*(k+1)+1) = newton_basis(A, Q(:,s*k+1), s, basis_shifts,1);
+        end
         
         if k == 0
             % QR factorization
@@ -95,7 +100,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,opt)
  
         end   
         
-        if do_reorth == 1
+        if reorth == 1
             for i = 1:s
                 Rkk_ = Q(:,1:s*k+(i-1))'*Q(:,s*k+i);
                 Q(:,s*k+i) = Q(:,s*k+i) - Q(:,1:s*k+(i-1))*Rkk_;
@@ -103,11 +108,15 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,opt)
         end
         
         if solve_eigs_every_step == 1
-            % Find all eigenpairs of T
             [Vp,Dp] = eig(T(1:s*(k+1),1:s*(k+1)));
         end
         
-        if (do_reorth == 1) || (do_restart == 1) || (may_break == 1) || (nargout >= 3)
+        % Level of orthogonality
+        if nargout >= 4
+            orth(k+1) = norm(eye(k*s+1)-Q(:,1:k*s+1)'*Q(:,1:k*s+1),'fro');
+        end
+
+        if (nargout >= 3) || (reorth == 1) || (may_break == 1)
             % Residual norm for smallest eigenpair
             [d_s,i_s] = min(diag(Dp));
             s_s = Vp(s*(k+1),i_s);
@@ -119,25 +128,25 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,opt)
             rnorm(k+1,2) = b(k+1)*abs(s_l);
         end
         
-        if nargout >= 4
-            % Level of orthogonality
-            orth(k+1) = norm(eye(k*s+1)-Q(:,1:k*s+1)'*Q(:,1:k*s+1),'fro');
+        % Check stopping criteria 
+        if may_break == 1
+            min_rnorm = min([rnorm(k+1,1), rnorm(k+1,2)]);
+            if min_rnorm < norm(T)*sqrt(eps)
+                has_converged = true;
+            end
         end
         
-        if (may_break == 1) && (min([rnorm(k+1,1) rnorm(k+1,2)]) < norm(T)*sqrt(eps))
-            break;
-        end
-
+        k = k+1;
     end
     
-    T = T(1:s*(k+1),:);
-    Q = Q(:,1:s*(k+1));
+    T = T(1:s*k,:);
+    Q = Q(:,1:s*k);
     
     if nargout >= 3
-        rnorm = rnorm(1:k+1,:);
+        rnorm = rnorm(1:k,:);
     end
     if nargout >= 4
-        orth = orth(1:k+1);
+        orth = orth(1:k);
     end
 end
 

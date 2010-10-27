@@ -16,31 +16,16 @@
 % rnorm - the residual norm in each step
 % orth  - the level of orthogonality in each step (||I-Vj'*Vj||)
 %--------------------------------------------------------------------------
-function [T,V,rnorm,orth] = lanczos(H,r0,maxiter,opt)
-
-    % Reorthogonalization interval;
-    m = 5;
+function [T,V,rnorm,orth] = lanczos(H,r0,maxiter,may_break,reorth)
     
-    % Set default values for options
-    may_break  = 0;
-    do_reorth  = 0;
-    do_restart = 0;
-    
-    % Check options and set values accordingly
-    if nargin == 4
-        if isfield(opt,'break') && (opt.break == 0 || opt.break == 1)
-            may_break = opt.break;
-        end
-        if isfield(opt,'reorth') && (opt.reorth == 0 || opt.reorth == 1)
-            do_reorth = opt.reorth;
-        end
-        if isfield(opt,'restart') && (opt.restart == 0 || opt.restart == 1)
-            % currently not implemented
-            do_restart = opt.restart;
-        end
+    if nargin < 4
+        may_break = 0;
+    end
+    if nargin < 5
+        reorth = 0;
     end
     
-    if (do_reorth == 1) || (do_restart == 1) || (may_break == 1) || (nargout > 2)
+    if (nargout >= 3) || (nargin >= 4)
         solve_eigs_every_step = 1;
     else
         solve_eigs_every_step = 0;
@@ -54,7 +39,10 @@ function [T,V,rnorm,orth] = lanczos(H,r0,maxiter,opt)
     rnorm = zeros(maxiter,2);
     orth = zeros(maxiter,1);
 
-    for j = 1:maxiter
+    has_converged = false;
+    j = 1;
+    
+    while (j <= maxiter) && (has_converged == false)
         r = H*V(:,j);
         if j > 1
             r=r-beta(j-1)*V(:,j-1);
@@ -64,7 +52,7 @@ function [T,V,rnorm,orth] = lanczos(H,r0,maxiter,opt)
         beta(j) = sqrt(r'*r);
         V(:,j+1) = r/beta(j);  
         
-        if do_reorth == 1
+        if reorth == 1
             % Reorthogonalization of basis vectors
             % TODO: RR-TSQR-BGS?
             %[Q(:,1:m),R(1:m,1:m)] = qr(V(:,1:m),0);
@@ -82,7 +70,7 @@ function [T,V,rnorm,orth] = lanczos(H,r0,maxiter,opt)
         end
         
         
-        if (do_reorth == 1) || (do_restart == 1) || (may_break == 1) || (nargout >= 3)
+        if (nargout >= 3) || (reorth == 1) || (may_break == 1)
             % Residual norm for smallest eigenpair
             [d_s,i_s] = min(diag(Dp));
             s_s = Vp(j,i_s);
@@ -99,20 +87,26 @@ function [T,V,rnorm,orth] = lanczos(H,r0,maxiter,opt)
             orth(j) = norm(eye(j)-V(:,1:j)'*V(:,1:j),'fro');
         end
         
-        if (may_break == 1) && (min([rnorm(j,1) rnorm(j,2)]) < norm(T)*sqrt(eps))
-            break;
+        % Check stopping criteria 
+        if may_break == 1
+            min_rnorm = min([rnorm(j,1), rnorm(j,2)]);
+            if min_rnorm < norm(T)*sqrt(eps)
+                has_converged = true;
+            end
         end
+        
+        j = j+1;
     end
     
     if solve_eigs_every_step == 0
-        T = diag(alpha(1:j)) + diag(beta(1:j-1),1) + diag(beta(1:j-1),-1);
+        T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
     end
 
     if nargout >= 3
-        rnorm = rnorm(1:j,:);
+        rnorm = rnorm(1:j-1,:);
     end
     if nargout >= 4
-        orth = orth(1:j);
+        orth = orth(1:j-1);
     end
 end
 

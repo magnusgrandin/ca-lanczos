@@ -1,31 +1,32 @@
 % Load matrix
 %A = H;
+%N=1000; A=sparse(1:N, 1:N, rand(N,1), N, N);
 %load('mhdb416.mat');
-load('finan512.mat');
+%load('finan512.mat');
 %load('fv3.mat');
 %load('fv2.mat');
-%load('msc04515.mat');     %leads to large errors
+load('msc04515.mat');     %leads to large errors
 A=Problem.A;
 n=size(A,1);
 
 % Total number of Lanczos steps (maximum)
-m=100;
+m=400;
 
 % Starting vector
 r0=rand(n,1);
 
 % Lanczos options
-opts.break = 1;
-opts.reorth = 0;
+opt.break = 1;
+opt.reorth = 1;
 
 % Standard Lanczos
-[T_st,V_st,r_st,o_st]=lanczos(A,r0,m,opts);
+[T_st,V_st,r_st,o_st]=lanczos(A,r0,m,opt.break,opt.reorth);
 
 % CA-Lanczos, for several values of s
-[T_ca_4,V_ca_4,r_ca_4,o_ca_4]=ca_lanczos(A,r0,4,m/4,opts);
-[T_ca_6,V_ca_6,r_ca_6,o_ca_6]=ca_lanczos(A,r0,6,m/6,opts);
-[T_ca_8,V_ca_8,r_ca_8,o_ca_8]=ca_lanczos(A,r0,8,m/8,opts);
-[T_ca_10,V_ca_10,r_ca_10,o_ca_10]=ca_lanczos(A,r0,10,m/10,opts);
+[T_ca_4,V_ca_4,r_ca_4,o_ca_4]=ca_lanczos(A,r0,4,m/4,'newton',opt.break,opt.reorth);
+[T_ca_6,V_ca_6,r_ca_6,o_ca_6]=ca_lanczos(A,r0,6,m/6,'newton',opt.break,opt.reorth);
+[T_ca_8,V_ca_8,r_ca_8,o_ca_8]=ca_lanczos(A,r0,8,m/8,'newton',opt.break,opt.reorth);
+[T_ca_10,V_ca_10,r_ca_10,o_ca_10]=ca_lanczos(A,r0,10,m/10,'newton',opt.break,opt.reorth);
 
 % Compute reference smallest and largest eigenvalues
 opts.disp=0;
