@@ -16,7 +16,7 @@
 % rnorm - the residual norm in each step
 % orth  - the level of orthogonality in each step (||I-Vj'*Vj||)
 %--------------------------------------------------------------------------
-function [T,V,rnorm,orth] = lanczos(H,r0,maxiter,may_break,reorth)
+function [T,V,rnorm,orth] = lanczos(A,r0,maxiter,may_break,reorth)
     
     if nargin < 4
         may_break = 0;
@@ -25,7 +25,7 @@ function [T,V,rnorm,orth] = lanczos(H,r0,maxiter,may_break,reorth)
         reorth = 0;
     end
     
-    if (nargout >= 3) || (nargin >= 4)
+    if (nargout >= 3) || (may_break == 1) || (reorth == 1)
         solve_eigs_every_step = 1;
     else
         solve_eigs_every_step = 0;
@@ -43,14 +43,51 @@ function [T,V,rnorm,orth] = lanczos(H,r0,maxiter,may_break,reorth)
     j = 1;
     
     while (j <= maxiter) && (has_converged == false)
-        r = H*V(:,j);
+        r = A*V(:,j);
         if j > 1
             r=r-beta(j-1)*V(:,j-1);
         end
         alpha(j) = r'*V(:,j);
         r = r - alpha(j)*V(:,j);
         beta(j) = sqrt(r'*r);
-        V(:,j+1) = r/beta(j);  
+        V(:,j+1) = r/beta(j);
+                
+        if solve_eigs_every_step == 1
+            T = diag(alpha(1:j)) + diag(beta(1:j-1),1) + diag(beta(1:j-1),-1);
+            [Vp,Dp] = eig(T);
+        end
+        
+        rnormest = 0;
+        if (nargout >= 3) || (reorth == 1) || (may_break == 1)
+            % Residual norm for smallest eigenpair
+            [d_s,i_s] = min(diag(Dp));
+            s_s = Vp(j,i_s);
+            rnormest(1) = beta(j)*abs(s_s);
+            %rnorm(j,1) = rnormest(1);
+            x_s = V(:,1:j)*Vp(:,i_s);
+            rnorm(j,1) = norm(A*x_s-d_s*x_s)/norm(d_s*x_s);
+           
+            % Residual norm for largest eigenpair
+            [d_l,i_l] = max(diag(Dp));
+            s_l = Vp(j,i_l);
+            rnormest(2) = beta(j)*abs(s_l);
+            %rnorm(j,2) = rnormest(2);
+            x_l = V(:,1:j)*Vp(:,i_l);
+            rnorm(j,2) = norm(A*x_l-d_l*x_l)/norm(d_l*x_l);
+        end
+        
+        if nargout >= 4
+            % Level of orthogonality
+            orth(j) = norm(eye(j)-V(:,1:j)'*V(:,1:j),'fro');
+        end
+        
+        % Check stopping criteria 
+        if may_break == 1
+            min_rnorm = min([rnormest(1), rnormest(2)]);
+            if min_rnorm < norm(T)*sqrt(eps);
+                has_converged = true;
+            end
+        end
         
         if reorth == 1
             % Reorthogonalization of basis vectors
@@ -61,39 +98,11 @@ function [T,V,rnorm,orth] = lanczos(H,r0,maxiter,may_break,reorth)
             %    Yk  = V(:,m*(k-1)+1:m*k) - Q(:,m*(k-2)+1:m*(k-1))*Rkk;
             %    [Q(:,m*(k-1)+1:m*k),R(m*(k-1)+1:m*k,m*(k-1)+1:m*k)] = qr(Yk,0);
             %end
-            Rkk = V(:,1:j)'*V(:,j+1);
-            V(:,j+1) = V(:,j+1) - V(:,1:j)*Rkk;
+            %Rkk = V(:,1:j)'*V(:,j+1);
+            %V(:,j+1) = V(:,j+1) - V(:,1:j)*Rkk;
+            [V(:,1:j+1),R_] = rr_tsqr_bgs(V(:,1:j+1),4);
         end
-        if solve_eigs_every_step == 1
-            T = diag(alpha(1:j)) + diag(beta(1:j-1),1) + diag(beta(1:j-1),-1);
-            [Vp,Dp] = eig(T);
-        end
-        
-        
-        if (nargout >= 3) || (reorth == 1) || (may_break == 1)
-            % Residual norm for smallest eigenpair
-            [d_s,i_s] = min(diag(Dp));
-            s_s = Vp(j,i_s);
-            rnorm(j,1) = beta(j)*abs(s_s);
-            
-            % Residual norm for largest eigenpair
-            [d_l,i_l] = max(diag(Dp));
-            s_l = Vp(j,i_l);
-            rnorm(j,2) = beta(j)*abs(s_l);
-        end
-        
-        if nargout >= 4
-            % Level of orthogonality
-            orth(j) = norm(eye(j)-V(:,1:j)'*V(:,1:j),'fro');
-        end
-        
-        % Check stopping criteria 
-        if may_break == 1
-            min_rnorm = min([rnorm(j,1), rnorm(j,2)]);
-            if min_rnorm < norm(T)*sqrt(eps)
-                has_converged = true;
-            end
-        end
+
         
         j = j+1;
     end

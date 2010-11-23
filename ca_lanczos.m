@@ -7,7 +7,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
         reorth = 0;
     end
     
-    if (nargout >= 3) || (nargin >= 5)
+    if (nargout >= 3) || (may_break == 1) || (reorth == 1)
         solve_eigs_every_step = 1;
     else
         solve_eigs_every_step = 0;
@@ -49,6 +49,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
     
         % Compute matrix powers
         if strcmpi(basis,'monomial')
+            %V(:,s*k+1) = Q(:,s*k+1);
             V(:,s*k+2:s*(k+1)+1) = matrix_powers(A, Q(:,s*k+1), s);
         elseif strcmpi(basis,'newton')
             V(:,s*k+1:s*(k+1)+1) = newton_basis(A, Q(:,s*k+1), s, basis_shifts,1);
@@ -56,7 +57,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
         
         if k == 0
             % QR factorization
-            [Q(:,1:s+1),Rk] = pqr(V(:,1:s+1));
+            [Q(:,1:s+1),Rk] = tsqr(V(:,1:s+1));
             
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
@@ -65,13 +66,14 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
             b(k+1) = T(s+1,s);
             
         else
+
             % BGS update
             Rkk_s = Q(:,s*(k-1)+1:s*k+1)' * V(:,s*k+2:s*(k+1)+1);
             V(:,s*k+2:s*(k+1)+1) = ...
                 V(:,s*k+2:s*(k+1)+1) - Q(:,s*(k-1)+1:s*k+1)*Rkk_s;
-            
+
             % QR factorization
-            [Q(:,s*k+2:s*(k+1)+1),Rk_s] = pqr(V(:,s*k+2:s*(k+1)+1));
+            [Q(:,s*k+2:s*(k+1)+1),Rk_s] = tsqr(V(:,s*k+2:s*(k+1)+1));
             
             % Compute Tk (tridiagonal sub-matrix of T)
             Rkk = [zeros(s,1), Rkk_s(1:s,:)];
@@ -100,42 +102,51 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
  
         end   
         
-        if reorth == 1
-            for i = 1:s
-                Rkk_ = Q(:,1:s*k+(i-1))'*Q(:,s*k+i);
-                Q(:,s*k+i) = Q(:,s*k+i) - Q(:,1:s*k+(i-1))*Rkk_;
-            end
-        end
-        
         if solve_eigs_every_step == 1
             [Vp,Dp] = eig(T(1:s*(k+1),1:s*(k+1)));
         end
-        
-        % Level of orthogonality
-        if nargout >= 4
-            orth(k+1) = norm(eye(k*s+1)-Q(:,1:k*s+1)'*Q(:,1:k*s+1),'fro');
-        end
 
+        rnormest = 0;
         if (nargout >= 3) || (reorth == 1) || (may_break == 1)
             % Residual norm for smallest eigenpair
             [d_s,i_s] = min(diag(Dp));
             s_s = Vp(s*(k+1),i_s);
-            rnorm(k+1,1) = b(k+1)*abs(s_s);
+            rnormest(1) = b(k+1)*abs(s_s);
+            %rnorm(k+1,1) = rnormest(1);
+            x_s = Q(:,1:s*(k+1))*Vp(:,i_s);
+            rnorm(k+1,1) = norm(A*x_s-d_s*x_s)/norm(d_s*x_s);
             
             % Residual norm for largest eigenpair
             [d_l,i_l] = max(diag(Dp));
             s_l = Vp(s*(k+1),i_l);
-            rnorm(k+1,2) = b(k+1)*abs(s_l);
+            rnormest(2) = b(k+1)*abs(s_l);
+            %rnorm(k+1,2) = rnormest(2);
+            x_l = Q(:,1:s*(k+1))*Vp(:,i_l);
+            rnorm(k+1,2) = norm(A*x_l-d_l*x_l)/norm(d_l*x_l);
         end
         
         % Check stopping criteria 
         if may_break == 1
-            min_rnorm = min([rnorm(k+1,1), rnorm(k+1,2)]);
-            if min_rnorm < norm(T)*sqrt(eps)
+            min_rnorm = min([rnormest(1), rnormest(2)]);
+            if min_rnorm < norm(T)*sqrt(eps);
                 has_converged = true;
             end
         end
+
+        if reorth == 1
+%            Rkk_ = Q(:,1:s*k+1)'*Q(:,s*k+2:s*(k+1)+1);
+%            Q_(:,s*k+2:s*(k+1)+1) = ...
+%                Q(:,s*k+2:s*(k+1)+1) - Q(:,1:s*k+1)*Rkk_;
+%            [Q(:,s*k+2:s*(k+1)+1),Rkk_] = tsqr(Q_(:,s*k+2:s*(k+1)+1));
+            [Q(:,1:s*(k+1)+1),Rk_] = rr_tsqr_bgs(Q(:,1:s*(k+1)+1),s);
+        end
+     
+        % Level of orthogonality
+        if nargout >= 4
+            orth(k+1) = norm(eye(s*(k+1))-Q(:,1:s*(k+1))'*Q(:,1:s*(k+1)),'fro');
+        end
         
+
         k = k+1;
     end
     
@@ -155,17 +166,6 @@ end
 function vec = eyeshvec(len)
     vec = eye(len,1);
     vec=circshift(vec,len-1);
-end
-
-%% A temporary fix.
-%% This function does a QR factorization of matrix A, and shifts
-%% the signs of the resulting factorization matrices such that R 
-%% only has positive values on its diagonals.
-function [Q,R] = pqr(A)
-   [Q,R] = qr(A,0);
-   d = sign(diag(R));
-   R = diag(d)*R;
-   Q = Q*diag(d);
 end
  
 %% Compute s matrix-vector multiplications of A and q
