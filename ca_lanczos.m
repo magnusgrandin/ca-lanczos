@@ -88,13 +88,36 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
 %             Q{k}(:,2:s) = Q_(:,2:s);
 %             Q{k+1}(:,1) = Q_(:,s+1);
             
-            Q_ = {[Q{k-1}(:,1:s),Q{k}(:,1)], V(:,2:s+1)};
+%             % Orthogonality against previous block of basis vectors
+%             Q_ = {[Q{k-1}(:,1:s),Q{k}(:,1)], V(:,2:s+1)};
+%             [Q_,Rk_] = rr_tsqr_bgs(Q_);
+%             Q{k}(:,2:s) = Q_{2}(:,1:s-1);
+%             Q{k+1}(:,1) = Q_{2}(:,s);
+%             Rkk_s = Rk_(1:s+1,end-s+1:end);
+%             Rk_s = Rk_(end-s+1:end,end-s+1:end);
+ 
+            % Orthogonality against all previous blocks
+            % 1. Copy Q and V to block array Q_ = {Q{1} ... Q{k} V},
+            %    where Q{1} ... Q{k-1} and V have s columns, and 
+            %    Q{k} has s+1 columns.
+            % 2. Do RR-TSQR-BGS on all blocks
+            % 3. Copy the blocks back, splitting Q_{k} into the s-column 
+            %    blocks Q{k} and Q{k+1}.
+            if k > 2
+                Q_ = {Q{1:k-2} [Q{k-1}(:,1:s) Q{k}(:,1)] V(:,2:s+1)};
+            else
+                Q_ = {[Q{k-1}(:,1:s) Q{k}(:,1)] V(:,2:s+1)};
+            end
             [Q_,Rk_] = rr_tsqr_bgs(Q_);
-            Q{k}(:,2:s) = Q_{2}(:,1:s-1);
-            Q{k+1}(:,1) = Q_{2}(:,s);
-            Rkk_s = Rk_(1:s+1,end-s+1:end);
+            for i = 1:k-2
+                Q{i} = Q_{i};
+            end
+            Q{k-1} = Q_{k-1}(:,1:s);
+            Q{k} = [Q_{k-1}(:,s+1) Q_{k}(:,1:s-1)];
+            Q{k+1}(:,1) = Q_{k}(:,s); 
+            Rkk_s = Rk_(end-2*s:end-s,end-s+1:end);
             Rk_s = Rk_(end-s+1:end,end-s+1:end);
-            
+
             
             % Compute Tk (tridiagonal sub-matrix of T)
             Rkk = [zeros(s,1), Rkk_s(1:s,:)];
