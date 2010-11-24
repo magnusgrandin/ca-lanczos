@@ -1,9 +1,9 @@
 function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
 
-    if nargin < 5
+    if nargin < 6
         may_break = 0;
     end
-    if nargin < 6
+    if nargin < 7
         reorth = 0;
     end
     
@@ -19,16 +19,24 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
     n = length(r);
     b = zeros(s+1,1);
     V = zeros(n,maxlanczos+1);
-    Q = zeros(n,maxlanczos+1);
+    
+    % Allocate Q as a cell array, one cell for each block, allowing
+    % the last block to have fewer than s columns.
+    Q = cell(1,ceil(maxlanczos/s)+1);
+    for i = 1:length(Q)
+        Q{i} = zeros(n,s);
+    end
+    Q{end} = zeros(n,1);
+    
     rnorm = zeros(t,2);
     orth = zeros(t,1);
     
     b0 = norm(r);
-    Q(:,1) = (1/b0)*r;
-    V(:,1) = Q(:,1);
+    Q{1}(:,1) = (1/b0)*r;
+    V(:,1) = Q{1}(:,1);
     
     has_converged = false;
-    k = 0;
+    k = 1;
     
     % Fix basis vectors
     if strcmpi(basis,'monomial')
@@ -45,35 +53,46 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
     end
     
   
-    while (k < t) && (has_converged == false)
+    while (k <= t) && (has_converged == false)
     
         % Compute matrix powers
         if strcmpi(basis,'monomial')
-            %V(:,s*k+1) = Q(:,s*k+1);
-            V(:,s*k+2:s*(k+1)+1) = matrix_powers(A, Q(:,s*k+1), s);
+            V(:,1) = Q{k}(:,1);
+            V(:,2:s+1) = matrix_powers(A, Q{k}(:,1), s);
         elseif strcmpi(basis,'newton')
-            V(:,s*k+1:s*(k+1)+1) = newton_basis(A, Q(:,s*k+1), s, basis_shifts,1);
+            V(:,1:s+1) = newton_basis(A, Q{k}(:,1), s, basis_shifts,1);
         end
         
-        if k == 0
+        if k == 1
             % QR factorization
-            [Q(:,1:s+1),Rk] = tsqr(V(:,1:s+1));
+            [Q_,Rk] = tsqr(V(:,1:s+1));
+            Q{1}(:,1:s) = Q_(:,1:s);
+            Q{2}(:,1) = Q_(:,s+1);
             
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
 
             % Compute next beta
-            b(k+1) = T(s+1,s);
+            b(k) = T(s+1,s);
             
         else
 
-            % BGS update
-            Rkk_s = Q(:,s*(k-1)+1:s*k+1)' * V(:,s*k+2:s*(k+1)+1);
-            V(:,s*k+2:s*(k+1)+1) = ...
-                V(:,s*k+2:s*(k+1)+1) - Q(:,s*(k-1)+1:s*k+1)*Rkk_s;
-
-            % QR factorization
-            [Q(:,s*k+2:s*(k+1)+1),Rk_s] = tsqr(V(:,s*k+2:s*(k+1)+1));
+%             % BGS update
+%             Q_ = [Q{k-1}(:,1:s),Q{k}(:,1)];
+%             Rkk_s = Q_(:,1:s+1)' * V(:,2:s+1);
+%             V(:,2:s+1) = V(:,2:s+1) - Q_(:,1:s+1)*Rkk_s;
+% 
+%             % QR factorization
+%             Q_ = zeros(n,s+1);
+%             [Q_(:,2:s+1),Rk_s] = tsqr(V(:,2:s+1));
+%             Q{k}(:,2:s) = Q_(:,2:s);
+%             Q{k+1}(:,1) = Q_(:,s+1);
+            
+            Q_ = {[Q{k-1}(:,1:s),Q{k}(:,1)], V(:,2:s+1)};
+            [Q_,Rk_] = rr_tsqr_bgs(Q_);
+            Q{k}(:,2:s) = Q_{2}(:,1:s-1);
+            Q{k+1}(:,1) = Q_{2}(:,s);
+            Rk_s = Rk_(s+2:2*s+1,s+2:2*s+1);
             
             % Compute Tk (tridiagonal sub-matrix of T)
             Rkk = [zeros(s,1), Rkk_s(1:s,:)];
@@ -86,42 +105,48 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
             es = eyeshvec(s);
             Tk = Rk(1:s,1:s)*Bk(1:s,:)/Rk(1:s,1:s) ...
                 + (bk/rho_t)*zk*es' ...
-                - b(k)*e1*es'*Rkk(1:s,1:s)/Rk(1:s,1:s);
+                - b(k-1)*e1*es'*Rkk(1:s,1:s)/Rk(1:s,1:s);
 
             % Compute the next beta
-            b(k+1) = bk*(rho/rho_t);
+            b(k) = bk*(rho/rho_t);
             
             % Extend T
-            T11 = T(1:s*k,1:s*k);
-            T12 = b(k)*eyeshvec(s*k)*eye(s,1)';
-            T21 = b(k)*eye(s,1)*eyeshvec(s*k)';
+            T11 = T(1:s*(k-1),1:s*(k-1));
+            T12 = b(k-1)*eyeshvec(s*(k-1))*eye(s,1)';
+            T21 = b(k-1)*eye(s,1)*eyeshvec(s*(k-1))';
             T22 = Tk;
-            T31 = zeros(1,s*k);
-            T32 = b(k+1)*eyeshvec(s)';
+            T31 = zeros(1,s*(k-1));
+            T32 = b(k)*eyeshvec(s)';
             T = [T11, T12; T21, T22; T31, T32];
  
         end   
         
         if solve_eigs_every_step == 1
-            [Vp,Dp] = eig(T(1:s*(k+1),1:s*(k+1)));
+            [Vp,Dp] = eig(T(1:s*k,1:s*k));
         end
 
         rnormest = 0;
         if (nargout >= 3) || (reorth == 1) || (may_break == 1)
             % Residual norm for smallest eigenpair
             [d_s,i_s] = min(diag(Dp));
-            s_s = Vp(s*(k+1),i_s);
-            rnormest(1) = b(k+1)*abs(s_s);
+            s_s = Vp(s*k,i_s);
+            rnormest(1) = b(k)*abs(s_s);
             %rnorm(k+1,1) = rnormest(1);
-            x_s = Q(:,1:s*(k+1))*Vp(:,i_s);
+            x_s = zeros(n,1);
+            for i = 1:k
+                x_s = x_s+Q{i}*Vp(s*(i-1)+1:s*i,i_s);
+            end
             rnorm(k+1,1) = norm(A*x_s-d_s*x_s)/norm(d_s*x_s);
             
             % Residual norm for largest eigenpair
             [d_l,i_l] = max(diag(Dp));
-            s_l = Vp(s*(k+1),i_l);
-            rnormest(2) = b(k+1)*abs(s_l);
+            s_l = Vp(s*k,i_l);
+            rnormest(2) = b(k)*abs(s_l);
             %rnorm(k+1,2) = rnormest(2);
-            x_l = Q(:,1:s*(k+1))*Vp(:,i_l);
+            x_l = zeros(n,1);
+            for i = 1:k
+                x_l = x_l+Q{i}*Vp(s*(i-1)+1:s*i,i_l);
+            end
             rnorm(k+1,2) = norm(A*x_l-d_l*x_l)/norm(d_l*x_l);
         end
         
@@ -138,26 +163,34 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
 %            Q_(:,s*k+2:s*(k+1)+1) = ...
 %                Q(:,s*k+2:s*(k+1)+1) - Q(:,1:s*k+1)*Rkk_;
 %            [Q(:,s*k+2:s*(k+1)+1),Rkk_] = tsqr(Q_(:,s*k+2:s*(k+1)+1));
-            [Q(:,1:s*(k+1)+1),Rk_] = rr_tsqr_bgs(Q(:,1:s*(k+1)+1),s);
+           [Q(1:k),Rk_] = rr_tsqr_bgs(Q(1:k));
         end
      
         % Level of orthogonality
         if nargout >= 4
-            orth(k+1) = norm(eye(s*(k+1))-Q(:,1:s*(k+1))'*Q(:,1:s*(k+1)),'fro');
+            Q_ = [];
+            for i = 1:k
+                Q_ = [Q_ Q{i}];
+            end
+            orth(k+1) = norm(eye(s*k)-Q_(:,1:s*k)'*Q_(:,1:s*k),'fro');
         end
         
 
         k = k+1;
     end
     
-    T = T(1:s*k,:);
-    Q = Q(:,1:s*k);
+    T = T(1:s*(k-1),:);
+    Q_ = [];
+    for i = 1:k-1
+        Q_ = [Q_ Q{i}];
+    end
+    Q = Q_;
     
     if nargout >= 3
-        rnorm = rnorm(1:k,:);
+        rnorm = rnorm(1:(k-1),:);
     end
     if nargout >= 4
-        orth = orth(1:k);
+        orth = orth(1:(k-1));
     end
 end
 

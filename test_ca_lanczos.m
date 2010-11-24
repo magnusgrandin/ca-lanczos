@@ -1,8 +1,8 @@
 % Load matrix
 %A = H;
 %N=1000; A=sparse(1:N, 1:N, rand(N,1), N, N);
-%load('mhdb416.mat'); A=Problem.A;
-load('finan512.mat'); A=Problem.A;              %n=74752, nnz=596992
+load('mhdb416.mat'); A=Problem.A;
+%load('finan512.mat'); A=Problem.A;              %n=74752, nnz=596992
 %load('fv3.mat'); A=Problem.A;            %Eigs unable to find largest eigenvalue
 %load('fv2.mat'); A=Problem.A;
 %load('msc04515.mat'); A=Problem.A;       %Very ill-conditioned
@@ -18,7 +18,7 @@ r0=rand(n,1);
 
 % Lanczos options
 opt.break = 0;
-opt.reorth = 1;
+opt.reorth = 0;
 
 % Standard Lanczos
 time_st=cputime;
@@ -45,8 +45,8 @@ time_ca_20=cputime;
 % Compute reference smallest and largest eigenvalues
 opts.disp=0;
 se=0; le=0;
-%[V_,se,fs] = eigs(A,1,'sm',opts);
-%[V_,le,fl] = eigs(A,1,'lm',opts);
+[V_,se,fs] = eigs(A,1,'sm',opts);
+[V_,le,fl] = eigs(A,1,'lm',opts);
 disp('=======');
 if(fs == 0)
     disp(['Smallest eigenvalue: ' num2str(se)]);
