@@ -100,7 +100,21 @@ function [T,V,rnorm,orth] = lanczos(A,r0,maxiter,may_break,reorth)
             %end
             %Rkk = V(:,1:j)'*V(:,j+1);
             %V(:,j+1) = V(:,j+1) - V(:,1:j)*Rkk;
-            %[V(:,1:j+1),R_] = rr_tsqr_bgs(V(:,1:j+1),4);
+            
+            % Copy V to temporary cell (block) array
+            b = 4;
+            V_ = cell(1,ceil((j+1)/b));
+            for i = 1:ceil((j+1)/b)
+                cols = b*(i-1)+1:min(b*i,j+1);
+                V_{i} = V(:,cols);
+            end
+            % Do reorthogonalization on blocks
+            [V_,R_] = rr_tsqr_bgs(V_);
+            % Copy reorthogonalized blocks back to V
+            for i = 1:ceil((j+1)/b)
+                cols = b*(i-1)+1:min(b*i,j+1);
+                V(:,cols) = V_{i};
+            end
         end
 
         

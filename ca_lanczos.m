@@ -92,7 +92,9 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
             [Q_,Rk_] = rr_tsqr_bgs(Q_);
             Q{k}(:,2:s) = Q_{2}(:,1:s-1);
             Q{k+1}(:,1) = Q_{2}(:,s);
-            Rk_s = Rk_(s+2:2*s+1,s+2:2*s+1);
+            Rkk_s = Rk_(1:s+1,end-s+1:end);
+            Rk_s = Rk_(end-s+1:end,end-s+1:end);
+            
             
             % Compute Tk (tridiagonal sub-matrix of T)
             Rkk = [zeros(s,1), Rkk_s(1:s,:)];
@@ -163,7 +165,14 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
 %            Q_(:,s*k+2:s*(k+1)+1) = ...
 %                Q(:,s*k+2:s*(k+1)+1) - Q(:,1:s*k+1)*Rkk_;
 %            [Q(:,s*k+2:s*(k+1)+1),Rkk_] = tsqr(Q_(:,s*k+2:s*(k+1)+1));
-           [Q(1:k),Rk_] = rr_tsqr_bgs(Q(1:k));
+            Q_ = Q(1:k);
+            Q_{k} = [Q{k} Q{k+1}(:,1)];
+            [Q_,Rk_] = rr_tsqr_bgs(Q_);
+            for i = 1:k-1
+                Q{i} = Q_{i};
+            end
+            Q{k} = Q_{k}(:,1:s);
+            Q{k+1}(:,1) = Q_{k}(:,s+1);
         end
      
         % Level of orthogonality

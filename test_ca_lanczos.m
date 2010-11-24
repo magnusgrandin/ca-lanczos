@@ -11,7 +11,7 @@ load('mhdb416.mat'); A=Problem.A;
 n=size(A,1);
 
 % Total number of Lanczos steps (maximum)
-m=120;
+m=60;
 
 % Starting vector
 r0=rand(n,1);

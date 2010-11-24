@@ -97,26 +97,15 @@ for k = 1:M
         disp('rank deficient');
         numNullSpaceCols = mk - rk;
         nullSpaceColIndices = rk+1:rk+numNullSpaceCols;
-        Rk = S*W;
+        Rk = S*W';
         Q{k} = Q{k}*U;
         Q{k}(:,nullSpaceColIndices) = rand(nrows,numNullSpaceCols);
         R_ = Q{k}'*Q{k}(:,nullSpaceColIndices);
         Q{k}(:,nullSpaceColIndices) = Q{k}(:,nullSpaceColIndices) - Q{k}*R_;
-        [Q{k},R_] = tsqr(Q{k});
-        R(cum_cols+1:cum_cols+mk,cum_cols+1:cum_cols+mk) = R_
+        [Q{k}(:,nullSpaceColIndices),R_] = tsqr(Q{k}(:,nullSpaceColIndices));
+        R(cum_cols+1:cum_cols+mk,cum_cols+1:cum_cols+mk) = RZk;
     end
-    
-%             if rk == mk
-%                 Q(:,mk*(k-1)+1:mk*k) = QZk;
-%                 R(mk*(k-1)+1:mk*k,mk*(k-1)+1:mk*k) = RZk;
-%     
-%             else
-%                 Qtk = Q(:,mk*(k-1)+1:mk*k)*U;
-%                 [Wtk,Rtk]=qr(S(1:rk,1:rk)*W(1:rk,1:mk));
-%                 Q(:,mk*(k-1)+1:mk*(k-1)+rk) = Qtk(:,1:rk)*Wtk;
-%                 R(mk*(k-1)+1:mk*k,mk*(k-1)+1:mk*k) = Rtk;
-%             end
-    
+        
     cum_cols = cum_cols+mk;
     
 end
@@ -130,9 +119,8 @@ ncols = size(Y,2);
 [Q,R] = tsqr(Y);
 [U,S,W] = svd(RZk);
 S_diag = diag(S);
-rk = 0;
-   for i = 1:mk
-       if S_diag(i) <= eps
+for i = 1:mk
+   if S_diag(i) <= eps
            rk = i;
            break;
        end
