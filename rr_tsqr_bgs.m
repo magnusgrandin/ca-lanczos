@@ -12,127 +12,174 @@
 %
 function [Q,R,rank] = rr_tsqr_bgs(V,tol)
     
-if nargin > 1
-    eps = tol;
-else
-    eps = 1.0e-10;
-end
-
-M = length(V);
-nrows = length(V{1}(:,1));
-ncols = 0;
-for i = 1:M
-    ncols = ncols + size(V{i},2);
-end
-R = zeros(ncols,ncols);
-Q = cell(1,M);
-for i = 1:M
-    Q{i} = zeros(size(V{i}));
-end
-
-cum_cols = 0;
-
-for k = 1:M
+    if nargin > 1
+        eps = tol;
+    else
+        eps = 1.0e-10;
+    end
     
-    mk = size(V{k},2);
+    M = length(V);
+    nrows = length(V{1}(:,1));
+    ncols = 0;
+    for i = 1:M
+        ncols = ncols + size(V{i},2);
+    end
+    R = zeros(ncols,ncols);
+    Q = cell(1,M);
+    for i = 1:M
+        Q{i} = zeros(size(V{i}));
+    end
     
-    % Get the columns of Q{1..k}
-    Q_ = [];
-    for j = 1:k-1
-        Q_ = [Q_ Q{j}];
+    ccols = 0;
+    
+    for k = 1:M
+        
+        blockNumCols = size(V{k},2);
+        [Q{k},Rk] = projectAndNormalize(Q(1:k-1),V{k});
+
+        crows = 0;
+        updateCols = ccols+1:ccols+blockNumCols;
+        for i = 1:length(Rk)
+            blockNumRows = size(Rk{i},1);
+            updateRows = crows+1:crows+blockNumRows;
+            R(updateRows,updateCols)=Rk{i};
+            crows = crows+blockNumRows;
+        end
+        ccols = ccols+blockNumCols;
+        
     end
 
-    % Compute norms of each column of Vk
-    norms_Vk = zeros(mk,1);
-    for i = 1:mk
-        norms_Vk(i) = sqrt(sum(V{k}(:,i).^2));
+end
+
+%  Compute the projection of X onto Q
+%
+%     C = Q'*X;  X = X - Q_*C;
+%
+function [X,R] = project(Q,X)
+    % project() only works when Q is a cell array and X is not.
+    if ~iscell(Q)
+        disp('Input Q (arg 1) to project() must be cell (block) array.');
+        return;
+    end
+    if iscell(X)
+        disp('Input X (arg 2) project() must be a column matrix.');
+        return;
+    end    
+    % Quick exit if empty array or no blocks.
+    if isempty(Q) || isempty(Q{1})
+        R = {};
+        return;
+    end
+    numBlocks = length(Q);
+    R = cell(1,numBlocks);
+    for i = 1:numBlocks
+        R{i} = Q{i}'*X;
+        X = X - Q{i}*R{i};
+    end
+end
+    
+function [Q,R,rank] = normalize(X,tol)
+
+    nrows = size(X,1);
+    ncols = size(X,2);
+    [Q,R] = tsqr(X);
+    [U,S,W] = svd(R);
+    S_diag = diag(S);
+    rank = ncols;
+    for i = 1:ncols
+        if S_diag(i) <= eps
+            rank = i;
+            break;
+        end
+    end
+    if(rank == ncols)
+        % Q,R and rank already computed.
+        return;
+    else
+        R = S*W';
+        Q = Q*U;
+        Q = randomizeNullSpace(Q,rank);
+    end
+end
+
+function [Q,R] = projectAndNormalize(Q,X)
+
+    % TODO: tune this
+    tol = 1/10;
+    
+    ncols = size(X,2);
+    numBlocksQ = length(Q);
+    R = cell(1,numBlocksQ+1);
+    
+    % Compute norms of each column of X before first orthogonalization
+    normsBeforeFirst = zeros(ncols,1);
+    for i = 1:ncols
+        normsBeforeFirst(i) = sqrt(sum(X(:,i).^2));
     end
     
     % First block orthogonalization pass
-    if k == 1
-        Yk = V{k};
-    else
-        Rkk_ = Q_'*V{k};
-        Yk = V{k} - Q_*Rkk_;
-        R(1:cum_cols,cum_cols+1:cum_cols+mk) = Rkk_;
+    [Y,R] = project(Q,X);
+    [QY,RY,rank] = normalize(Y);
+    % If R is not full rank, the last ncols-rank columns have been
+    % randomized and orthogonalized within QY. Orthogonalize those 
+    % columns of QY against the previous Q-blocks.
+    if rank < ncols
+        nullSpaceCols = rank+1:ncols;
+        [QY(:,nullSpaceCols),R_] = project(Q,QY(:,nullSpaceCols));
+        [QY(:,nullSpaceCols),R_] = tsqr(QY(:,nullSpaceCols));
     end
-    [QYk,RYk] = tsqr(Yk);
-
-    norms_Yk = zeros(mk,1);
-    for i = 1:mk
-        norms_Yk(i) = sqrt(sum(RYk(:,i).^2));
+    
+    % Compute norms of each column of X after first orthogonalization
+    normsAfterFirst = zeros(ncols,1);
+    for i = 1:ncols
+        normsAfterFirst(i) = sqrt(sum(RY(:,i).^2));
     end
     
     % If any column norm drops too much, do second
     % pass of orthogonalization
-    if max(abs(norms_Vk-norms_Yk)./norms_Vk) > 1/10 %TODO: tune this
+    if max(abs(normsBeforeFirst-normsAfterFirst)./normsBeforeFirst) > tol
+        reorthogonalize = true;
+    else
+        reorthogonalize = false;
+    end
+    
+    if reorthogonalize == false
+        Z  = Y;
+        QZ = QY;
+        RZ = RY;
+    else
         disp('second');
-        if(k == 1)
-            Zk = Yk;
-        else
-            Rkk_ = Q_'*Yk;
-            Zk = Yk - Q_*Rkk_;
-            R(1:cum_cols,cum_cols+1:cum_cols+mk) = R(1:cum_cols,cum_cols+1:cum_cols+mk) + Rkk_;
+        % Get a copy of the previous coefficients
+        [Z,R_] = project(Q,Y); 
+        % Add the second pass coefficients to the
+        % previous ones.
+        for i = 1:numBlocksQ;
+            R{i} = R{i} + R_{i};
         end
-        [QZk,RZk] = tsqr(Zk);
-    else
-        Zk  = Yk;
-        QZk = QYk;
-        RZk = RYk;
+        [QZ,RZ,rank] = normalize(Z);
+        % If R is not full rank, the last ncols-rank columns have been
+        % randomized and orthogonalized within QZ. Orthogonalize those 
+        % columns of QZ against the previous Q-blocks, don't need to 
+        % keep the coefficients.
+        if rank < ncols
+            nullSpaceCols = rank+1:ncols;
+            [QZ(:,nullSpaceCols),R_] = project(Q,QZ(:,nullSpaceCols));
+            [QZ(:,nullSpaceCols),R_] = tsqr(QZ(:,nullSpaceCols));
+        end
     end
     
-    % Compute SVD of RZk and get its rank
-   [U,S,W] = svd(RZk);
-   S_diag = diag(S);
-   rk = 0;
-   for i = 1:mk
-       if S_diag(i) > eps
-           rk = rk + 1;
-       end
-   end
-   if rk == mk
-        Q{k} = QZk;
-        R(cum_cols+1:cum_cols+mk,cum_cols+1:cum_cols+mk) = RZk;
-    else
-        disp('rank deficient');
-        numNullSpaceCols = mk - rk;
-        nullSpaceColIndices = rk+1:rk+numNullSpaceCols;
-        Rk = S*W';
-        Q{k} = Q{k}*U;
-        Q{k}(:,nullSpaceColIndices) = rand(nrows,numNullSpaceCols);
-        R_ = Q{k}'*Q{k}(:,nullSpaceColIndices);
-        Q{k}(:,nullSpaceColIndices) = Q{k}(:,nullSpaceColIndices) - Q{k}*R_;
-        [Q{k}(:,nullSpaceColIndices),R_] = tsqr(Q{k}(:,nullSpaceColIndices));
-        R(cum_cols+1:cum_cols+mk,cum_cols+1:cum_cols+mk) = RZk;
-    end
-        
-    cum_cols = cum_cols+mk;
-    
-end
-R = R(1:cum_cols,1:cum_cols);
+    Q = QZ;
+    R{numBlocksQ+1} = RZ;
 end
 
-function [Q,R,rank_Y] = normalize(Y,tol)
+function Q = randomizeNullSpace(Q,rank)
 
-nrows = size(Y,1);
-ncols = size(Y,2);
-[Q,R] = tsqr(Y);
-[U,S,W] = svd(RZk);
-S_diag = diag(S);
-for i = 1:mk
-   if S_diag(i) <= eps
-           rk = i;
-           break;
-       end
-   end
-   
-rank_Y = rank(R);
-if(rank_Y < ncols)
-    numNullSpaceCols = ncols - rank_Y;
-    nullSpaceColIndices = rank_Y+1:rank_Y+numNullSpaceCols;
+    nrows = size(Q,1);
+    ncols = size(Q,2);
+    numNullSpaceCols = ncols - rank;
+    nullSpaceColIndices = rank+1:ncols;
     Q(:,nullSpaceColIndices) = rand(nrows,numNullSpaceCols);
-    R_ = Q'*Q(:,nullSpaceColIndices);
-    Q(:,nullSpaceColIndices) = Q(:,nullSpaceColIndices)-Q*R_;
-    [Q,R_] = tsqr(Q);
-end
+    [Q(:,nullSpaceColIndices),R_] = project(Q,Q(:,nullSpaceColIndices));
+    [Q(:,nullSpaceColIndices),R_] = tsqr(Q(:,nullSpaceColIndices));
+    
 end

@@ -1,17 +1,17 @@
 % Load matrix
 %A = H;
 %N=1000; A=sparse(1:N, 1:N, rand(N,1), N, N);
-load('mhdb416.mat'); A=Problem.A;
+%load('mhdb416.mat'); A=Problem.A;
 %load('finan512.mat'); A=Problem.A;              %n=74752, nnz=596992
 %load('fv3.mat'); A=Problem.A;            %Eigs unable to find largest eigenvalue
 %load('fv2.mat'); A=Problem.A;
 %load('msc04515.mat'); A=Problem.A;       %Very ill-conditioned
 %load('Trefethen_20000b'); A=Problem.A;   %Large errors in eigs for all Lanczos
-%load('Chem97ZtZ'); A=Problem.A;
+load('Chem97ZtZ'); A=Problem.A;
 n=size(A,1);
 
 % Total number of Lanczos steps (maximum)
-m=60;
+m=40;
 
 % Starting vector
 r0=rand(n,1);

@@ -161,7 +161,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
             for i = 1:k
                 x_s = x_s+Q{i}*Vp(s*(i-1)+1:s*i,i_s);
             end
-            rnorm(k+1,1) = norm(A*x_s-d_s*x_s)/norm(d_s*x_s);
+            rnorm(k,1) = norm(A*x_s-d_s*x_s)/norm(d_s*x_s);
             
             % Residual norm for largest eigenpair
             [d_l,i_l] = max(diag(Dp));
@@ -172,7 +172,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
             for i = 1:k
                 x_l = x_l+Q{i}*Vp(s*(i-1)+1:s*i,i_l);
             end
-            rnorm(k+1,2) = norm(A*x_l-d_l*x_l)/norm(d_l*x_l);
+            rnorm(k,2) = norm(A*x_l-d_l*x_l)/norm(d_l*x_l);
         end
         
         % Check stopping criteria 
@@ -204,7 +204,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
             for i = 1:k
                 Q_ = [Q_ Q{i}];
             end
-            orth(k+1) = norm(eye(s*k)-Q_(:,1:s*k)'*Q_(:,1:s*k),'fro');
+            orth(k) = norm(eye(s*k)-Q_(:,1:s*k)'*Q_(:,1:s*k),'fro');
         end
         
 
