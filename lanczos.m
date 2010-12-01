@@ -14,18 +14,28 @@
 % T     - the tridiagonal lanczos matrix
 % V     - the orthonormal matrix of lanczos vectors
 % rnorm - the residual norm in each step
-% orth  - the level of orthogonality in each step (||I-Vj'*Vj||)
+% orthl  - the level of orthogonality in each step (||I-Vj'*Vj||)
 %--------------------------------------------------------------------------
-function [T,V,rnorm,orth] = lanczos(A,r0,maxiter,may_break,reorth)
+function [T,V,rnorm,orthl] = lanczos(A,r0,maxiter,stop,orth)
     
     if nargin < 4
-        may_break = 0;
+        stop = 0;
     end
     if nargin < 5
-        reorth = 0;
+        orth = 'none';
+    else
+        if isnumeric(orth)
+            orth = num2str(orth);
+        end
+        if strcmpi(orth,'none')==0 && strcmpi(orth,'full')==0 ...
+                && strcmpi(orth,'periodic')==0 && strcmpi(orth,'select')==0
+            disp(['lanczos.m: Invalid option value for orth: ', orth]);
+            disp('    expected {''none''|''full''|''periodic''|''select''}');
+            return;
+        end
     end
     
-    if (nargout >= 3) || (may_break == 1) || (reorth == 1)
+    if (nargout >= 3) || (stop == 1) || strcmpi(orth,'none')==0
         solve_eigs_every_step = 1;
     else
         solve_eigs_every_step = 0;
@@ -37,7 +47,7 @@ function [T,V,rnorm,orth] = lanczos(A,r0,maxiter,may_break,reorth)
     alpha = zeros(1,maxiter);
     beta = zeros(1,maxiter);
     rnorm = zeros(maxiter,2);
-    orth = zeros(maxiter,1);
+    orthl = zeros(maxiter,1);
 
     has_converged = false;
     j = 1;
@@ -52,7 +62,7 @@ function [T,V,rnorm,orth] = lanczos(A,r0,maxiter,may_break,reorth)
         beta(j) = sqrt(r'*r);
         V(:,j+1) = r/beta(j);
         
-        V = orthogonalize(V,j,reorth);
+        V = orthogonalize(V,j,orth);
         
         if solve_eigs_every_step == 1
             T = diag(alpha(1:j)) + diag(beta(1:j-1),1) + diag(beta(1:j-1),-1);
@@ -60,7 +70,7 @@ function [T,V,rnorm,orth] = lanczos(A,r0,maxiter,may_break,reorth)
         end
         
         rnormest = 0;
-        if (nargout >= 3) || (reorth == 1) || (may_break == 1)
+        if (nargout >= 3) || (stop == 1) || strcmpi(orth,'none')==0 
             % Residual norm for smallest eigenpair
             [d_s,i_s] = min(diag(Dp));
             s_s = Vp(j,i_s);
@@ -80,21 +90,17 @@ function [T,V,rnorm,orth] = lanczos(A,r0,maxiter,may_break,reorth)
         
         if nargout >= 4
             % Level of orthogonality
-            orth(j) = norm(eye(j)-V(:,1:j)'*V(:,1:j),'fro');
+            orthl(j) = norm(eye(j)-V(:,1:j)'*V(:,1:j),'fro');
         end
         
         % Check stopping criteria 
-        if may_break == 1
+        if stop == 1
             min_rnorm = min([rnormest(1), rnormest(2)]);
             if min_rnorm < norm(T)*sqrt(eps);
                 has_converged = true;
             end
         end
-        
-        if reorth == 1
-        end
-
-        
+                
         j = j+1;
     end
     
@@ -106,38 +112,39 @@ function [T,V,rnorm,orth] = lanczos(A,r0,maxiter,may_break,reorth)
         rnorm = rnorm(1:j-1,:);
     end
     if nargout >= 4
-        orth = orth(1:j-1);
+        orthl = orthl(1:j-1);
     end
 end
 
 function V = orthogonalize(V,iter,orth)
 
-    % Reorthogonalization of basis vectors
-    % TODO: RR-TSQR-BGS?
-    %[Q(:,1:m),R(1:m,1:m)] = qr(V(:,1:m),0);
-    %for k = 2:j/m
-    %    Rkk = Q(:,m*(k-2)+1:m*(k-1))'*V(:,m*(k-1)+1:m*k);
-    %    Yk  = V(:,m*(k-1)+1:m*k) - Q(:,m*(k-2)+1:m*(k-1))*Rkk;
-    %    [Q(:,m*(k-1)+1:m*k),R(m*(k-1)+1:m*k,m*(k-1)+1:m*k)] = qr(Yk,0);
-    %end
-    %Rkk = V(:,1:j)'*V(:,j+1);
-    %V(:,j+1) = V(:,j+1) - V(:,1:j)*Rkk;
-    
-    % Copy V to temporary cell (block) array
-    b = 4; %TODO: take this as option.
-    V_ = cell(1,ceil((iter+1)/b));
-    for i = 1:ceil((iter+1)/b)
-        cols = b*(i-1)+1:min(b*i,iter+1);
-        V_{i} = V(:,cols);
-    end
-    % Do reorthogonalization on blocks
-    [V_,R_] = rr_tsqr_bgs(V_);
-    % Copy reorthogonalized blocks back to V
-    for i = 1:ceil((iter+1)/b)
-        cols = b*(i-1)+1:min(b*i,iter+1);
-        V(:,cols) = V_{i};
-    end
-
+    if strcmpi(orth,'full') == 1
+        % Reorthogonalization of basis vectors
+        % TODO: RR-TSQR-BGS?
+        %[Q(:,1:m),R(1:m,1:m)] = qr(V(:,1:m),0);
+        %for k = 2:j/m
+        %    Rkk = Q(:,m*(k-2)+1:m*(k-1))'*V(:,m*(k-1)+1:m*k);
+        %    Yk  = V(:,m*(k-1)+1:m*k) - Q(:,m*(k-2)+1:m*(k-1))*Rkk;
+        %    [Q(:,m*(k-1)+1:m*k),R(m*(k-1)+1:m*k,m*(k-1)+1:m*k)] = qr(Yk,0);
+        %end
+        %Rkk = V(:,1:j)'*V(:,j+1);
+        %V(:,j+1) = V(:,j+1) - V(:,1:j)*Rkk;
+        
+        % Copy V to temporary cell (block) array
+        b = 4; %TODO: take this as option.
+        V_ = cell(1,ceil((iter+1)/b));
+        for i = 1:ceil((iter+1)/b)
+            cols = b*(i-1)+1:min(b*i,iter+1);
+            V_{i} = V(:,cols);
+        end
+        % Do reorthogonalization on blocks
+        [V_,R_] = rr_tsqr_bgs(V_);
+        % Copy reorthogonalized blocks back to V
+        for i = 1:ceil((iter+1)/b)
+            cols = b*(i-1)+1:min(b*i,iter+1);
+            V(:,cols) = V_{i};
+        end
+    end   
 end
 
 

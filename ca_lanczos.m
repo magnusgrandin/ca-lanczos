@@ -1,13 +1,48 @@
-function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
+%%
+%   function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
+%   
+%   Communication avoiding Lanczos algorithm, as described in 
+%   M. Hoemmen, Communication-Avoiding Krylov Subspace Methods, PhD thesis,
+%   University of California Berkeley (2010).
+%   
+%   Input:
+%     A     - The symmetric matrix
+%     r     - Initial vector
+%     s     - SpMV kernel step size
+%     t     - Number of iterations (restart length = s*t)
+%     basis - Basis to use {'monomial'|'newton'}
+%     stop  - Flag to tell whether we should stop on convergence of first
+%             Ritz-pair (optional) {0|1}
+%     orth  - Orthogonalization strategy to use (optional)
+%             {'none'|'full'|'periodic'|'select'}
+%     
+%   Output:
+%     T     - Lanczos projection matrix [(s*t) x (s*t)]
+%     Q     - Basis vectors [n x (s*t)]
+%     rnorm - Vector of the residual norms in each iteration (optional)
+%     orthl - Vector of level of orthogonality in each iteration (optional)
+%
+function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
 
+    % Check input arguments
     if nargin < 6
-        may_break = 0;
+        stop = 0;
     end
     if nargin < 7
-        reorth = 0;
+        orth = 'none';
+    else
+        if isnumeric(orth)
+            orth = num2str(orth);
+        end
+        if strcmpi(orth,'none')==0 && strcmpi(orth,'full')==0 ...
+                && strcmpi(orth,'periodic')==0 && strcmpi(orth,'select')==0
+            disp(['ca_lanczos.m: Invalid option value for orth: ', orth]);
+            disp('    expected {''none''|''full''|''periodic''|''select''}');
+            return;
+        end
     end
     
-    if (nargout >= 3) || (may_break == 1) || (reorth == 1)
+    if (nargout >= 3) || (stop == 1) || strcmpi(orth,'none') == 0
         solve_eigs_every_step = 1;
     else
         solve_eigs_every_step = 0;
@@ -29,7 +64,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
     Q{end} = zeros(n,1);
     
     rnorm = zeros(t,2);
-    orth = zeros(t,1);
+    orthl = zeros(t,1);
     
     b0 = norm(r);
     Q{1}(:,1) = (1/b0)*r;
@@ -76,25 +111,26 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
             b(k) = T(s+1,s);
             
         else
-
-%             % BGS update
-%             Q_ = [Q{k-1}(:,1:s),Q{k}(:,1)];
-%             Rkk_s = Q_(:,1:s+1)' * V(:,2:s+1);
-%             V(:,2:s+1) = V(:,2:s+1) - Q_(:,1:s+1)*Rkk_s;
-% 
-%             % QR factorization
-%             Q_ = zeros(n,s+1);
-%             [Q_(:,2:s+1),Rk_s] = tsqr(V(:,2:s+1));
-%             Q{k}(:,2:s) = Q_(:,2:s);
-%             Q{k+1}(:,1) = Q_(:,s+1);
-            
-%             % Orthogonality against previous block of basis vectors
-%             Q_ = {[Q{k-1}(:,1:s),Q{k}(:,1)], V(:,2:s+1)};
-%             [Q_,Rk_] = rr_tsqr_bgs(Q_);
-%             Q{k}(:,2:s) = Q_{2}(:,1:s-1);
-%             Q{k+1}(:,1) = Q_{2}(:,s);
-%             Rkk_s = Rk_(1:s+1,end-s+1:end);
-%             Rk_s = Rk_(end-s+1:end,end-s+1:end);
+            % Just orthogonalize against the previous block of vectors.
+            if strcmpi(orth,'none') == 1
+                %% BGS update
+                %Q_ = [Q{k-1}(:,1:s),Q{k}(:,1)];
+                %Rkk_s = Q_(:,1:s+1)' * V(:,2:s+1);
+                %V(:,2:s+1) = V(:,2:s+1) - Q_(:,1:s+1)*Rkk_s;
+    
+                %% QR factorization
+                %Q_ = zeros(n,s+1);
+                %[Q_(:,2:s+1),Rk_s] = tsqr(V(:,2:s+1));
+                %Q{k}(:,2:s) = Q_(:,2:s);
+                %Q{k+1}(:,1) = Q_(:,s+1);
+                
+                % Orthogonality against previous block of basis vectors
+                Q_ = {[Q{k-1}(:,1:s),Q{k}(:,1)], V(:,2:s+1)};
+                [Q_,Rk_] = rr_tsqr_bgs(Q_);
+                Q{k}(:,2:s) = Q_{2}(:,1:s-1);
+                Q{k+1}(:,1) = Q_{2}(:,s);
+                Rkk_s = Rk_(1:s+1,end-s+1:end);
+                Rk_s = Rk_(end-s+1:end,end-s+1:end);
  
             % Orthogonality against all previous blocks
             % 1. Copy Q and V to block array Q_ = {Q{1} ... Q{k} V},
@@ -102,22 +138,23 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
             %    Q{k} has s+1 columns.
             % 2. Do RR-TSQR-BGS on all blocks
             % 3. Copy the blocks back, splitting Q_{k} into the s-column 
-            %    blocks Q{k} and Q{k+1}.
-            if k > 2
-                Q_ = {Q{1:k-2} [Q{k-1}(:,1:s) Q{k}(:,1)] V(:,2:s+1)};
-            else
-                Q_ = {[Q{k-1}(:,1:s) Q{k}(:,1)] V(:,2:s+1)};
+            %    blocks Q{k} and Q{k+1}.              
+            elseif strcmpi(orth,'full') == 1
+                if k > 2
+                    Q_ = {Q{1:k-2} [Q{k-1}(:,1:s) Q{k}(:,1)] V(:,2:s+1)};
+                else
+                    Q_ = {[Q{k-1}(:,1:s) Q{k}(:,1)] V(:,2:s+1)};
+                end
+                [Q_,Rk_] = rr_tsqr_bgs(Q_);
+                for i = 1:k-2
+                    Q{i} = Q_{i};
+                end
+                Q{k-1} = Q_{k-1}(:,1:s);
+                Q{k} = [Q_{k-1}(:,s+1) Q_{k}(:,1:s-1)];
+                Q{k+1}(:,1) = Q_{k}(:,s); 
+                Rkk_s = Rk_(end-2*s:end-s,end-s+1:end);
+                Rk_s = Rk_(end-s+1:end,end-s+1:end);
             end
-            [Q_,Rk_] = rr_tsqr_bgs(Q_);
-            for i = 1:k-2
-                Q{i} = Q_{i};
-            end
-            Q{k-1} = Q_{k-1}(:,1:s);
-            Q{k} = [Q_{k-1}(:,s+1) Q_{k}(:,1:s-1)];
-            Q{k+1}(:,1) = Q_{k}(:,s); 
-            Rkk_s = Rk_(end-2*s:end-s,end-s+1:end);
-            Rk_s = Rk_(end-s+1:end,end-s+1:end);
-
             
             % Compute Tk (tridiagonal sub-matrix of T)
             Rkk = [zeros(s,1), Rkk_s(1:s,:)];
@@ -151,7 +188,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
         end
 
         rnormest = 0;
-        if (nargout >= 3) || (reorth == 1) || (may_break == 1)
+        if (nargout >= 3) || (stop == 1) || strcmpi(orth,'none') == 0
             % Residual norm for smallest eigenpair
             [d_s,i_s] = min(diag(Dp));
             s_s = Vp(s*k,i_s);
@@ -176,14 +213,14 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
         end
         
         % Check stopping criteria 
-        if may_break == 1
+        if stop == 1
             min_rnorm = min([rnormest(1), rnormest(2)]);
             if min_rnorm < norm(T)*sqrt(eps);
                 has_converged = true;
             end
         end
 
-        if reorth == 1
+        if strcmpi(orth,'none') == 0
 %            Rkk_ = Q(:,1:s*k+1)'*Q(:,s*k+2:s*(k+1)+1);
 %            Q_(:,s*k+2:s*(k+1)+1) = ...
 %                Q(:,s*k+2:s*(k+1)+1) - Q(:,1:s*k+1)*Rkk_;
@@ -204,7 +241,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
             for i = 1:k
                 Q_ = [Q_ Q{i}];
             end
-            orth(k) = norm(eye(s*k)-Q_(:,1:s*k)'*Q_(:,1:s*k),'fro');
+            orthl(k) = norm(eye(s*k)-Q_(:,1:s*k)'*Q_(:,1:s*k),'fro');
         end
         
 
@@ -222,7 +259,7 @@ function [T,Q,rnorm,orth] = ca_lanczos(A,r,s,t,basis,may_break,reorth)
         rnorm = rnorm(1:(k-1),:);
     end
     if nargout >= 4
-        orth = orth(1:(k-1));
+        orthl = orthl(1:(k-1));
     end
 end
 
@@ -241,66 +278,3 @@ function V = matrix_powers(A,q,s)
         V(:,i) = A*V(:,i-1);
     end
 end
-
-% function [Q,R] = BGSreorth(V,mk)
-%     [n,m] = size(V);
-%     M = mod(V,mk)+1;
-%     
-%     for k = 1:M
-%             
-%         Vk = V(:,mk*(k-1)+1:mk*k);
-%         Qk = Q(:,1:mk*(k-1));
-%         % First pass of block CGS
-%         if k == 1
-%             Yk = Vk;
-%         else
-%             Rk = Qk*Vk;
-%             Yk = Vk - Qk*Vk;
-%         end
-%         
-%         % Second pass of block CGS
-%         if k == 1
-%             Zk = Yk;
-%         else
-%             Rk = Q(:,1:mk*(k-1))*Yk;
-%             Yk = V(:,mk*(k-1)+1:mk*k) - Q(:,1:mk*(k-1))*V(:,mk*(k-1)+1:mk*k);
-%         end
-%         
-%         % Compute column norms of Yk and Zk mark the orthogonalization as
-%         % good if the norm of each column of Zk is no smaller than half the
-%         % norm of the corresponding column of Yk
-%         good_cols = zeros(1,mk);
-%         for i = 1:mk
-%             colnorm_Yk = norm(Yk(:,i));
-%             colnorm_Zk = norm(Zk(:,1));
-%             if colnorm_Zk >= colnorm_Yk/2
-%                 good_cols(i) = 1;
-%             end
-%         end
-%         
-%         % Were the column norms good?
-%         colnorms_good = min(good_cols);
-% 
-%         if colnorms_good == false
-%             
-%         end
-%         
-%         
-%         Rkk = Q(:,1)'*V(:,m*k+1:m*(k+1));
-%         Yk  = V(:,m*k+1:m*(k+1)) - Q(:,1:m*(k-2)+1:m*(k-1))*Rkk;
-%         [Q(:,m*(k-1)+1:m*k),R(m*(k-1)+1:m*k,m*(k-1)+1:m*k)] = qr(Yk,0);
-%     end
-%  
-% end
-% function [Q,R] = blockCGS(V,mk)
-%      [n,m] = size(V);
-%      M = mod(V,mk);
-%      
-%     for j = 1:M
-%          Rkk = Q(:,1:)
-%          
-%          Rkk = Q(:,1)'*V(:,m*k+1:m*(k+1));
-%          Yk  = V(:,m*k+1:m*(k+1)) - Q(:,1:m*(k-2)+1:m*(k-1))*Rkk;
-%          [Q(:,m*(k-1)+1:m*k),R(m*(k-1)+1:m*k,m*(k-1)+1:m*k)] = qr(Yk,0);
-%      end
-%  end

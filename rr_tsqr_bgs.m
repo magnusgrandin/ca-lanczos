@@ -1,4 +1,6 @@
 %%
+%   function [Q,R,rank] = rr_tsqr_bgs(V,tol)
+%
 %   Rank revealing TSQR with block Gram-Schmidt orthogonalization
 %
 %   Input:
@@ -88,7 +90,7 @@ function [Q,R,rank] = normalize(X,tol)
     rank = ncols;
     for i = 1:ncols
         if S_diag(i) <= eps
-            rank = i;
+            rank = i-1;
             break;
         end
     end
@@ -149,7 +151,6 @@ function [Q,R] = projectAndNormalize(Q,X)
         RZ = RY;
     else
         disp('second');
-        % Get a copy of the previous coefficients
         [Z,R_] = project(Q,Y); 
         % Add the second pass coefficients to the
         % previous ones.
@@ -157,6 +158,7 @@ function [Q,R] = projectAndNormalize(Q,X)
             R{i} = R{i} + R_{i};
         end
         [QZ,RZ,rank] = normalize(Z);
+        %RZ = RZ + RZ*RY;
         % If R is not full rank, the last ncols-rank columns have been
         % randomized and orthogonalized within QZ. Orthogonalize those 
         % columns of QZ against the previous Q-blocks, don't need to 
@@ -174,12 +176,14 @@ end
 
 function Q = randomizeNullSpace(Q,rank)
 
+    disp('Randomize null space.');
+    disp(['Rank ' num2str(rank)]);
     nrows = size(Q,1);
     ncols = size(Q,2);
     numNullSpaceCols = ncols - rank;
     nullSpaceColIndices = rank+1:ncols;
     Q(:,nullSpaceColIndices) = rand(nrows,numNullSpaceCols);
-    [Q(:,nullSpaceColIndices),R_] = project(Q,Q(:,nullSpaceColIndices));
+    [Q(:,nullSpaceColIndices),R_] = project({Q},Q(:,nullSpaceColIndices));
     [Q(:,nullSpaceColIndices),R_] = tsqr(Q(:,nullSpaceColIndices));
     
 end
