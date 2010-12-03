@@ -4,12 +4,12 @@
 %   Rank revealing TSQR with block Gram-Schmidt orthogonalization
 %
 %   Input:
-%     V   - Cell array with blocks of vectors to be orthogonalized
-%     tol - The tolerance in rank deficiency (defalt: 1.0e-10)
+%     V   - cell array with blocks of vectors to be orthogonalized
+%     tol - the tolerance in rank deficiency (defalt: 1.0e-10)
 %
 %   Output:
-%     Q   - Cell array with blocks of orthogonalized vectors
-%     R   - The R factor in V = QR (dense matrix)
+%     Q   - cell array with blocks of orthogonalized vectors
+%     R   - the R factor in V = QR (dense matrix)
 %
 %
 function [Q,R,rank] = rr_tsqr_bgs(V,tol)

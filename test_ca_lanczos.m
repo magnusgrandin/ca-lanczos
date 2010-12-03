@@ -1,13 +1,17 @@
-function test_ca_lanczos(matrix, steps)
+function test_ca_lanczos(matrix, steps, eig_s, eig_l)
 
 % Load matrix
 load(matrix);
+Problem
 A=Problem.A;
 n=size(A,1);
 %N=1000; A=sparse(1:N, 1:N, rand(N,1), N, N);
 
 % Total number of Lanczos steps (maximum)
-if nargin >= 2
+if nargin >= 2 && isempty(steps)
+    steps = 0;
+end
+if nargin >= 2 && steps ~= 0
     m=steps;
 else
     m=120;
@@ -45,8 +49,12 @@ time_ca_20=cputime;
 % Compute reference smallest and largest eigenvalues
 opts.disp=0;
 se=0; le=0;
-[V_,se,fs] = eigs(A,1,'sm',opts);
-[V_,le,fl] = eigs(A,1,'lm',opts);
+if ~exist('eig_s','var') || isempty(eig_s)
+    [V_,se,fs] = eigs(A,1,'sm',opts);
+end
+if ~exist('eig_l','var') || isempty(eig_l)
+    [V_,le,fl] = eigs(A,1,'lm',opts);
+end
 disp('=======');
 if(fs == 0)
     disp(['Smallest eigenvalue: ' num2str(se)]);

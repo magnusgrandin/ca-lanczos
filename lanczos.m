@@ -1,20 +1,20 @@
-%--------------------------------------------------------------------------
-% The symmetric Lanczos algorithm
-% 
-% Input variables:
-% A       - the large sparse matrix
-% r0      - starting vector
-% maxiter - maximum order of the Krylov space
-% opt     - structure of options
-%           opt.break   : break on convergence of any eigenpair [{0} | 1]
-%           opt.reorth  : reorthogonalize lanczos vectors [{0} | 1]
-%           opt.restart : use restarting [{0} | 1]
+%%
+%   function [T,V,rnorm,orthl] = lanczos(A,r0,maxiter,stop,orth)
 %
-% Output variable:
-% T     - the tridiagonal lanczos matrix
-% V     - the orthonormal matrix of lanczos vectors
-% rnorm - the residual norm in each step
-% orthl  - the level of orthogonality in each step (||I-Vj'*Vj||)
+%   The symmetric Lanczos algorithm
+% 
+%   Input:
+%     A       - the large sparse symmetric matrix
+%     r0      - initial vector
+%     maxiter - mximum order of the Krylov space
+%     stop    - break on convergence of any eigenpair [{0} | 1]
+%     orth    - reorthogonalize lanczos vectors [{0} | 1]
+%
+%   Output variable:
+%     T       - the tridiagonal lanczos matrix
+%     V       - the orthonormal matrix of lanczos vectors
+%     rnorm   - the residual norm in each step
+%     orthl   - the level of orthogonality in each step (||I-Vj'*Vj||)
 %--------------------------------------------------------------------------
 function [T,V,rnorm,orthl] = lanczos(A,r0,maxiter,stop,orth)
     

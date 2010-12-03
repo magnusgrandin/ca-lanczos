@@ -6,21 +6,21 @@
 %   University of California Berkeley (2010).
 %   
 %   Input:
-%     A     - The symmetric matrix
-%     r     - Initial vector
+%     A     - the large sparse symmetric matrix
+%     r     - initial vector
 %     s     - SpMV kernel step size
-%     t     - Number of iterations (restart length = s*t)
-%     basis - Basis to use {'monomial'|'newton'}
-%     stop  - Flag to tell whether we should stop on convergence of first
+%     t     - number of iterations (restart length = s*t)
+%     basis - basis to use {'monomial'|'newton'}
+%     stop  - flag to tell whether we should stop on convergence of first
 %             Ritz-pair (optional) {0|1}
-%     orth  - Orthogonalization strategy to use (optional)
+%     orth  - orthogonalization strategy to use (optional)
 %             {'none'|'full'|'periodic'|'select'}
 %     
 %   Output:
 %     T     - Lanczos projection matrix [(s*t) x (s*t)]
-%     Q     - Basis vectors [n x (s*t)]
-%     rnorm - Vector of the residual norms in each iteration (optional)
-%     orthl - Vector of level of orthogonality in each iteration (optional)
+%     Q     - basis vectors [n x (s*t)]
+%     rnorm - vector of the residual norms in each iteration (optional)
+%     orthl - vector of level of orthogonality in each iteration (optional)
 %
 function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
 
@@ -87,7 +87,8 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
         disp(['ERROR: Unknown basis', basis]);
     end
     
-  
+    timeOrth = 0;
+
     while (k <= t) && (has_converged == false)
     
         % Compute matrix powers
@@ -111,6 +112,7 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             b(k) = T(s+1,s);
             
         else
+            timeTmp = cputime;
             % Just orthogonalize against the previous block of vectors.
             if strcmpi(orth,'none') == 1
                 %% BGS update
@@ -155,6 +157,8 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
                 Rkk_s = Rk_(end-2*s:end-s,end-s+1:end);
                 Rk_s = Rk_(end-s+1:end,end-s+1:end);
             end
+            
+            timeOrth = timeOrth + (cputime-timeTmp);
             
             % Compute Tk (tridiagonal sub-matrix of T)
             Rkk = [zeros(s,1), Rkk_s(1:s,:)];
@@ -261,6 +265,8 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
     if nargout >= 4
         orthl = orthl(1:(k-1));
     end
+    
+    disp(['Orthogonalization time: ', num2str(timeOrth)]);
 end
 
 %% Returns a columnvector with n elements, in which all elements are 
