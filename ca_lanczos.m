@@ -118,20 +118,19 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             
             if strcmpi(orth,'local')
                 % Orthogonality against previous block of basis vectors
-                [Q_,Rk_] = projectAndNormalize(Q(k-1),V(:,2:s+1));
+                [Q_,Rk_] = projectAndNormalize(Q(k-1),V(:,2:s+1),false);
                 Q{k} = [Q{k-1}(:,s+1) Q_(:,1:s)];
                 Q{k-1} = Q{k-1}(:,1:s);
                 Rkk_s = Rk_{1};% Rk_(end-2*s:end-s,end-s+1:end);
                 Rk_s = Rk_{2};%Rk_(end-s+1:end,end-s+1:end);
             elseif strcmpi(orth,'full')
                 % Orthogonality against all previous basis vectors
-                %[Q_,Rk_] = projectAndNormalize(Q(k-1),V(:,2:s+1));
-                
-                [Q_,Rk_] = projectAndNormalize(Q,V(:,2:s+1));
+                [Q_,Rk_] = projectAndNormalize(Q(k-1),V(:,2:s+1),false);
+                Rkk_s = Rk_{1};% Rk_(end-2*s:end-s,end-s+1:end);
+                Rk_s = Rk_{2};%Rk_(end-s+1:end,end-s+1:end);                
+                [Q_] = projectAndNormalize(Q,Q_,true);
                 Q{k} = [Q{k-1}(:,s+1) Q_(:,1:s)];
                 Q{k-1} = Q{k-1}(:,1:s);
-                Rkk_s = Rk_{k-1};% Rk_(end-2*s:end-s,end-s+1:end);
-                Rk_s = Rk_{k};%Rk_(end-s+1:end,end-s+1:end);
             end
             
             %Q = reorthogonalize(Q,k,orth);
@@ -166,9 +165,16 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
         if solve_eigs_every_step == 1
             [Vp,Dp] = eig(T(1:s*k,1:s*k));
         end
-
+        
+        %[sorted_eigs,eig_order] = sort(diag(Dp));
+        %rnorms=zeros(1,s*k);
+        %for i = 1:s*k
+        %    rnorms(i) = b(k)*abs(Vp(s*k,eig_order(i)));
+        %end
+        %figure(1); plot(rnorms);
+        
         rnormest = 0;
-        if (nargout >= 3) || (stop == 1) || strcmpi(orth,'local') == 0
+        if (nargout >= 3) || (stop == 1)
             % Residual norm for smallest eigenpair
             [d_s,i_s] = min(diag(Dp));
             s_s = Vp(s*k,i_s);
@@ -226,8 +232,6 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
     if nargout >= 4
         orthl = orthl(1:(k-1));
     end
-    
-    disp(['Orthogonalization time: ', num2str(timeOrth)]);
 end
 
 function Q = reorthogonalize(Q,iter,orth)
@@ -249,7 +253,8 @@ function vec = eyeshvec(len)
     vec=circshift(vec,len-1);
 end
  
-%% Compute s matrix-vector multiplications of A and q
+%% Compute s matrix-vector multiplications of A and q using 
+%% the monomial basis
 function V = matrix_powers(A,q,s)
     V = zeros(length(q),s);
     V(:,1) = A*q;
