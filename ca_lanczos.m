@@ -14,7 +14,7 @@
 %     stop  - flag to tell whether we should stop on convergence of first
 %             Ritz-pair (optional) {0|1}
 %     orth  - orthogonalization strategy to use (optional)
-%             {'none'|'full'|'periodic'|'select'}
+%             {'local'|'full'|'periodic'|'select'}
 %     
 %   Output:
 %     T     - Lanczos projection matrix [(s*t) x (s*t)]
@@ -29,25 +29,31 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
         stop = 0;
     end
     if nargin < 7
-        orth = 'none';
+        orth = 'local';
     else
         if isnumeric(orth)
             orth = num2str(orth);
         end
-        if strcmpi(orth,'none')==0 && strcmpi(orth,'full')==0 ...
+        if strcmpi(orth,'local')==0 && strcmpi(orth,'full')==0 ...
                 && strcmpi(orth,'periodic')==0 && strcmpi(orth,'select')==0
             disp(['ca_lanczos.m: Invalid option value for orth: ', orth]);
-            disp('    expected {''none''|''full''|''periodic''|''select''}');
+            disp('    expected {''local''|''full''|''periodic''|''select''}');
             return;
         end
     end
     
-    if (nargout >= 3) || (stop == 1) || strcmpi(orth,'none') == 0
+    if (nargout >= 3) || (stop == 1) || strcmpi(orth,'local') == 0
         solve_eigs_every_step = 1;
     else
         solve_eigs_every_step = 0;
     end
-
+ 
+    if strcmpi(orth,'local')
+        disp('Local orthogonalization');
+    elseif strcmpi(orth,'full')
+        disp('Full orthogonalization');
+    end
+    
     t = ceil(t);             % To make sure that t is an integer
     maxlanczos = s*t;
     
@@ -55,20 +61,15 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
     b = zeros(s+1,1);
     V = zeros(n,maxlanczos+1);
     
-    % Allocate Q as a cell array, one cell for each block, allowing
-    % the last block to have fewer than s columns.
-    Q = cell(1,ceil(maxlanczos/s)+1);
-    for i = 1:length(Q)
-        Q{i} = zeros(n,s);
-    end
-    Q{end} = zeros(n,1);
+    Q = {};
     
     rnorm = zeros(t,2);
     orthl = zeros(t,1);
     
     b0 = norm(r);
-    Q{1}(:,1) = (1/b0)*r;
-    V(:,1) = Q{1}(:,1);
+    q = (1/b0)*r;
+    V(:,1) = q;
+    
     
     has_converged = false;
     k = 1;
@@ -90,21 +91,23 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
     timeOrth = 0;
 
     while (k <= t) && (has_converged == false)
-    
+            
+        if k > 1
+            q = Q{k-1}(:,s+1);
+        end
+        
         % Compute matrix powers
         if strcmpi(basis,'monomial')
-            V(:,1) = Q{k}(:,1);
-            V(:,2:s+1) = matrix_powers(A, Q{k}(:,1), s);
+            V(:,1) = q;
+            V(:,2:s+1) = matrix_powers(A, q, s);
         elseif strcmpi(basis,'newton')
-            V(:,1:s+1) = newton_basis(A, Q{k}(:,1), s, basis_shifts,1);
+            V(:,1:s+1) = newton_basis(A, q, s, basis_shifts,1);
         end
         
         if k == 1
             % QR factorization
-            [Q_,Rk] = tsqr(V(:,1:s+1));
-            Q{1}(:,1:s) = Q_(:,1:s);
-            Q{2}(:,1) = Q_(:,s+1);
-            
+            [Q{1},Rk] = normalize(V(:,1:s+1));
+                        
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
 
@@ -112,53 +115,26 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             b(k) = T(s+1,s);
             
         else
-            timeTmp = cputime;
-            % Just orthogonalize against the previous block of vectors.
-            if strcmpi(orth,'none') == 1
-                %% BGS update
-                %Q_ = [Q{k-1}(:,1:s),Q{k}(:,1)];
-                %Rkk_s = Q_(:,1:s+1)' * V(:,2:s+1);
-                %V(:,2:s+1) = V(:,2:s+1) - Q_(:,1:s+1)*Rkk_s;
-    
-                %% QR factorization
-                %Q_ = zeros(n,s+1);
-                %[Q_(:,2:s+1),Rk_s] = tsqr(V(:,2:s+1));
-                %Q{k}(:,2:s) = Q_(:,2:s);
-                %Q{k+1}(:,1) = Q_(:,s+1);
-                
+            
+            if strcmpi(orth,'local')
                 % Orthogonality against previous block of basis vectors
-                Q_ = {[Q{k-1}(:,1:s),Q{k}(:,1)], V(:,2:s+1)};
-                [Q_,Rk_] = rr_tsqr_bgs(Q_);
-                Q{k}(:,2:s) = Q_{2}(:,1:s-1);
-                Q{k+1}(:,1) = Q_{2}(:,s);
-                Rkk_s = Rk_(1:s+1,end-s+1:end);
-                Rk_s = Rk_(end-s+1:end,end-s+1:end);
- 
-            % Orthogonality against all previous blocks
-            % 1. Copy Q and V to block array Q_ = {Q{1} ... Q{k} V},
-            %    where Q{1} ... Q{k-1} and V have s columns, and 
-            %    Q{k} has s+1 columns.
-            % 2. Do RR-TSQR-BGS on all blocks
-            % 3. Copy the blocks back, splitting Q_{k} into the s-column 
-            %    blocks Q{k} and Q{k+1}.              
-            elseif strcmpi(orth,'full') == 1
-                if k > 2
-                    Q_ = {Q{1:k-2} [Q{k-1}(:,1:s) Q{k}(:,1)] V(:,2:s+1)};
-                else
-                    Q_ = {[Q{k-1}(:,1:s) Q{k}(:,1)] V(:,2:s+1)};
-                end
-                [Q_,Rk_] = rr_tsqr_bgs(Q_);
-                for i = 1:k-2
-                    Q{i} = Q_{i};
-                end
-                Q{k-1} = Q_{k-1}(:,1:s);
-                Q{k} = [Q_{k-1}(:,s+1) Q_{k}(:,1:s-1)];
-                Q{k+1}(:,1) = Q_{k}(:,s); 
-                Rkk_s = Rk_(end-2*s:end-s,end-s+1:end);
-                Rk_s = Rk_(end-s+1:end,end-s+1:end);
+                [Q_,Rk_] = projectAndNormalize(Q(k-1),V(:,2:s+1));
+                Q{k} = [Q{k-1}(:,s+1) Q_(:,1:s)];
+                Q{k-1} = Q{k-1}(:,1:s);
+                Rkk_s = Rk_{1};% Rk_(end-2*s:end-s,end-s+1:end);
+                Rk_s = Rk_{2};%Rk_(end-s+1:end,end-s+1:end);
+            elseif strcmpi(orth,'full')
+                % Orthogonality against all previous basis vectors
+                %[Q_,Rk_] = projectAndNormalize(Q(k-1),V(:,2:s+1));
+                
+                [Q_,Rk_] = projectAndNormalize(Q,V(:,2:s+1));
+                Q{k} = [Q{k-1}(:,s+1) Q_(:,1:s)];
+                Q{k-1} = Q{k-1}(:,1:s);
+                Rkk_s = Rk_{k-1};% Rk_(end-2*s:end-s,end-s+1:end);
+                Rk_s = Rk_{k};%Rk_(end-s+1:end,end-s+1:end);
             end
             
-            timeOrth = timeOrth + (cputime-timeTmp);
+            %Q = reorthogonalize(Q,k,orth);
             
             % Compute Tk (tridiagonal sub-matrix of T)
             Rkk = [zeros(s,1), Rkk_s(1:s,:)];
@@ -192,7 +168,7 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
         end
 
         rnormest = 0;
-        if (nargout >= 3) || (stop == 1) || strcmpi(orth,'none') == 0
+        if (nargout >= 3) || (stop == 1) || strcmpi(orth,'local') == 0
             % Residual norm for smallest eigenpair
             [d_s,i_s] = min(diag(Dp));
             s_s = Vp(s*k,i_s);
@@ -200,7 +176,7 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             %rnorm(k+1,1) = rnormest(1);
             x_s = zeros(n,1);
             for i = 1:k
-                x_s = x_s+Q{i}*Vp(s*(i-1)+1:s*i,i_s);
+                x_s = x_s+Q{i}(:,1:s)*Vp(s*(i-1)+1:s*i,i_s);
             end
             rnorm(k,1) = norm(A*x_s-d_s*x_s)/norm(d_s*x_s);
             
@@ -211,7 +187,7 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             %rnorm(k+1,2) = rnormest(2);
             x_l = zeros(n,1);
             for i = 1:k
-                x_l = x_l+Q{i}*Vp(s*(i-1)+1:s*i,i_l);
+                x_l = x_l+Q{i}(:,1:s)*Vp(s*(i-1)+1:s*i,i_l);
             end
             rnorm(k,2) = norm(A*x_l-d_l*x_l)/norm(d_l*x_l);
         end
@@ -224,21 +200,6 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             end
         end
 
-        if strcmpi(orth,'none') == 0
-%            Rkk_ = Q(:,1:s*k+1)'*Q(:,s*k+2:s*(k+1)+1);
-%            Q_(:,s*k+2:s*(k+1)+1) = ...
-%                Q(:,s*k+2:s*(k+1)+1) - Q(:,1:s*k+1)*Rkk_;
-%            [Q(:,s*k+2:s*(k+1)+1),Rkk_] = tsqr(Q_(:,s*k+2:s*(k+1)+1));
-            Q_ = Q(1:k);
-            Q_{k} = [Q{k} Q{k+1}(:,1)];
-            [Q_,Rk_] = rr_tsqr_bgs(Q_);
-            for i = 1:k-1
-                Q{i} = Q_{i};
-            end
-            Q{k} = Q_{k}(:,1:s);
-            Q{k+1}(:,1) = Q_{k}(:,s+1);
-        end
-     
         % Level of orthogonality
         if nargout >= 4
             Q_ = [];
@@ -267,6 +228,18 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
     end
     
     disp(['Orthogonalization time: ', num2str(timeOrth)]);
+end
+
+function Q = reorthogonalize(Q,iter,orth)
+    if strcmpi(orth,'full') == 1
+        M = length(Q);
+        ccols = 0;
+        for i=1:M
+            Q_ = Q{i};
+            [Q_,Rk_] = projectAndNormalize(Q(1:i-1), Q_);
+            Q{i} = Q_;
+        end
+    end
 end
 
 %% Returns a columnvector with n elements, in which all elements are 

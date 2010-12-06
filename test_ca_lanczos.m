@@ -49,22 +49,22 @@ time_ca_20=cputime;
 % Compute reference smallest and largest eigenvalues
 opts.disp=0;
 se=0; le=0;
+disp('=======');
 if ~exist('eig_s','var') || isempty(eig_s)
     [V_,se,fs] = eigs(A,1,'sm',opts);
+    if(fs == 0)
+        disp(['Smallest eigenvalue: ' num2str(se)]);
+    else
+        disp('Smallest eigenvalue did not converge using eigs.');
+    end
 end
 if ~exist('eig_l','var') || isempty(eig_l)
     [V_,le,fl] = eigs(A,1,'lm',opts);
-end
-disp('=======');
-if(fs == 0)
-    disp(['Smallest eigenvalue: ' num2str(se)]);
-else
-    disp('Smallest eigenvalue did not converge using eigs.');
-end
-if(fl == 0)
-    disp(['Largest eigenvalue:  ' num2str(le)]);
-else
-    disp('Largest eigenvalue did not converge using eigs.');
+    if(fl == 0)
+        disp(['Largest eigenvalue:  ' num2str(le)]);
+    else
+        disp('Largest eigenvalue did not converge using eigs.');
+    end
 end
 disp('=======');
     

@@ -22,20 +22,20 @@ function [T,V,rnorm,orthl] = lanczos(A,r0,maxiter,stop,orth)
         stop = 0;
     end
     if nargin < 5
-        orth = 'none';
+        orth = 'local';
     else
         if isnumeric(orth)
             orth = num2str(orth);
         end
-        if strcmpi(orth,'none')==0 && strcmpi(orth,'full')==0 ...
+        if strcmpi(orth,'local')==0 && strcmpi(orth,'full')==0 ...
                 && strcmpi(orth,'periodic')==0 && strcmpi(orth,'select')==0
             disp(['lanczos.m: Invalid option value for orth: ', orth]);
-            disp('    expected {''none''|''full''|''periodic''|''select''}');
+            disp('    expected {''local''|''full''|''periodic''|''select''}');
             return;
         end
     end
     
-    if (nargout >= 3) || (stop == 1) || strcmpi(orth,'none')==0
+    if (nargout >= 3) || (stop == 1) || strcmpi(orth,'local')==0
         solve_eigs_every_step = 1;
     else
         solve_eigs_every_step = 0;
@@ -70,7 +70,7 @@ function [T,V,rnorm,orthl] = lanczos(A,r0,maxiter,stop,orth)
         end
         
         rnormest = 0;
-        if (nargout >= 3) || (stop == 1) || strcmpi(orth,'none')==0 
+        if (nargout >= 3) || (stop == 1) || strcmpi(orth,'local')==0 
             % Residual norm for smallest eigenpair
             [d_s,i_s] = min(diag(Dp));
             s_s = Vp(j,i_s);
@@ -120,30 +120,23 @@ function V = orthogonalize(V,iter,orth)
 
     if strcmpi(orth,'full') == 1
         % Reorthogonalization of basis vectors
-        % TODO: RR-TSQR-BGS?
-        %[Q(:,1:m),R(1:m,1:m)] = qr(V(:,1:m),0);
-        %for k = 2:j/m
-        %    Rkk = Q(:,m*(k-2)+1:m*(k-1))'*V(:,m*(k-1)+1:m*k);
-        %    Yk  = V(:,m*(k-1)+1:m*k) - Q(:,m*(k-2)+1:m*(k-1))*Rkk;
-        %    [Q(:,m*(k-1)+1:m*k),R(m*(k-1)+1:m*k,m*(k-1)+1:m*k)] = qr(Yk,0);
-        %end
-        %Rkk = V(:,1:j)'*V(:,j+1);
-        %V(:,j+1) = V(:,j+1) - V(:,1:j)*Rkk;
+        Rkk = V(:,1:iter)'*V(:,iter+1);
+        V(:,iter+1) = V(:,iter+1) - V(:,1:iter)*Rkk;
         
         % Copy V to temporary cell (block) array
-        b = 4; %TODO: take this as option.
-        V_ = cell(1,ceil((iter+1)/b));
-        for i = 1:ceil((iter+1)/b)
-            cols = b*(i-1)+1:min(b*i,iter+1);
-            V_{i} = V(:,cols);
-        end
+        %b = 4; %TODO: take this as option.
+        %V_ = cell(1,ceil((iter+1)/b));
+        %for i = 1:ceil((iter+1)/b)
+        %    cols = b*(i-1)+1:min(b*i,iter+1);
+        %    V_{i} = V(:,cols);
+        %end
         % Do reorthogonalization on blocks
-        [V_,R_] = rr_tsqr_bgs(V_);
+        %[V_,R_] = projectAndNormalize(V_);
         % Copy reorthogonalized blocks back to V
-        for i = 1:ceil((iter+1)/b)
-            cols = b*(i-1)+1:min(b*i,iter+1);
-            V(:,cols) = V_{i};
-        end
+        %for i = 1:ceil((iter+1)/b)
+        %    cols = b*(i-1)+1:min(b*i,iter+1);
+        %    V(:,cols) = V_{i};
+        %end
     end   
 end
 
