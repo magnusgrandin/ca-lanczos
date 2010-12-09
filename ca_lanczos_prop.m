@@ -1,42 +1,74 @@
-function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol)
+function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
     
-    n = length(r0);
-    
-    b = zeros(s*m+2,1);
-    V = zeros(n,s*m+1);
-    Q = zeros(n,s*m+1);
-    
-    b(1) = norm(r0);
-    Q(:,1) = (1/b(1))*r0;
-    V(:,1) = Q(:,1);
-
-    for k = 0:m-1
+    if nargin < 6
+        tol = 1.0e-10;
+    end
+    if nargin < 7
+        basis = 'newton';
+    end
+    if nargin < 8
+        adaptive = false;
+    end
         
-        % Fix basis vectors (first attempt: Monomial basis)
+    n = length(r0);
+    b = zeros(m+1,1);
+    V = zeros(n,s+1);
+    Q = {};
+
+    nrm = norm(r0);
+    q = (1/nrm)*r0;
+    V(:,1) = q;
+    
+    % Fix basis vectors
+    if strcmpi(basis,'monomial')
         I = eye(s+1);
         Bk = I(:,2:s+1);        
-               
-        % Compute matrix powers
-        V(:,s*k+2:s*(k+1)+1) = matrix_powers(A, Q(:,s*k+1), s);
+    elseif strcmpi(basis,'newton')
+        % Run standard Lanczos for 2s steps
+        T = lanczos(A,r0,2*s,tol);
+        basis_eigs = eig(T);
+        basis_shifts = leja(real(basis_eigs),'nonmodified');
+        Bk = newton_basis_matrix(basis_shifts,s,1);
+    else
+        disp(['ERROR: Unknown basis', basis]);
+    end
+    
+    hasConverged = false;
+    k = 0;
+
+    while (k < m) && (hasConverged == false)
         
-        if k == 0
+        k = k+1;
+
+        if k > 1
+            q = Q{k-1}(:,s+1);
+        end
+        
+        % Compute matrix powers
+        if strcmpi(basis,'monomial')
+            V(:,1) = q;
+            V(:,2:s+1) = matrix_powers(A, q, s);
+        elseif strcmpi(basis,'newton')
+            V(:,1:s+1) = newton_basis(A, q, s, basis_shifts,1);
+        end
+        
+        if k == 1
             % QR factorization
-            [Q(:,1:s+1),Rk] = pqr(V(:,1:s+1));
+            [Q{1},Rk] = normalize(V(:,1:s+1));
             
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
-
+            
             % Compute next beta
-            b(s+1) = T(s+1,s);
+            b(k) = T(s+1,s);
             
         else
-            % BGS update
-            Rkk_s = Q(:,s*(k-1)+1:s*k+1)' * V(:,s*k+2:s*(k+1)+1);
-            V(:,s*k+2:s*(k+1)+1) = ...
-                V(:,s*k+2:s*(k+1)+1) - Q(:,s*(k-1)+1:s*k+1)*Rkk_s;
- 
-            % QR factorization
-            [Q(:,s*k+2:s*(k+1)+1),Rk_s] = pqr(V(:,s*k+2:s*(k+1)+1));
+            % Orthogonality against previous block of basis vectors
+            [Q_,Rk_] = projectAndNormalize(Q(k-1),V(:,2:s+1),false);
+            Q{k} = [Q{k-1}(:,s+1) Q_(:,1:s)];
+            Q{k-1} = Q{k-1}(:,1:s);
+            Rkk_s = Rk_{1};% Rk_(end-2*s:end-s,end-s+1:end);
+            Rk_s = Rk_{2};%Rk_(end-s+1:end,end-s+1:end);
             
             % Compute Tk (tridiagonal sub-matrix of T)
             Rkk = [zeros(s,1), Rkk_s(1:s,:)];
@@ -49,35 +81,39 @@ function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol)
             es = eyeshvec(s);
             Tk = Rk(1:s,1:s)*Bk(1:s,:)/Rk(1:s,1:s) ...
                 + (bk/rho_t)*zk*es' ...
-                - b(s*k+1)*e1*es'*Rkk(1:s,1:s)/Rk(1:s,1:s);
-
+                - b(k-1)*e1*es'*Rkk(1:s,1:s)/Rk(1:s,1:s);
+            
             % Compute the next beta
-            b(s*(k+1)+1) = bk*(rho/rho_t);
+            b(k) = bk*(rho/rho_t);
             
             % Extend T
-            T11 = T(1:s*k,1:s*k);
-            T12 = b(s*k+1)*eyeshvec(s*k)*eye(s,1)';
-            T21 = b(s*k+1)*eye(s,1)*eyeshvec(s*k)';
+            T11 = T(1:s*(k-1),1:s*(k-1));
+            T12 = b(k-1)*eyeshvec(s*(k-1))*eye(s,1)';
+            T21 = b(k-1)*eye(s,1)*eyeshvec(s*(k-1))';
             T22 = Tk;
-            T31 = zeros(1,s*k);
-            T32 = b(s*(k+1)+1)*eyeshvec(s)';
+            T31 = zeros(1,s*(k-1));
+            T32 = b(k)*eyeshvec(s)';
             T = [T11, T12; T21, T22; T31, T32];
+            
         end
         
-        % Compute the residual and stop iterations if tolerance fulfilled
-        if(s*(k+1) > 2)
-            [Vp,D] = eig(T(1:s*(k+1),1:s*(k+1)));
+        % Compute the residual and stop iterations if tolerance,
+        % fulfilled if adaptive flag is set.
+        if (k*s >= 3) && (adaptive == true)
+            [Vp,D] = eig(T(1:k*s,1:k*s));
             matexp = Vp*expm(-1i*dt*D)*Vp';
-            residual = abs(dt*T(s*(k+1)+1,s*(k+1))*matexp(s*(k+1),1)*b(1));
+            residual = abs(dt*b(k)*matexp(k*s,1)*nrm);
             if residual < tol
+                disp(num2str(residual));
+                hasConverged = true;
                 break;
             end
         end
-        
     end
-    lsteps = (k+1)*s;
-    T = T(1:lsteps,1:lsteps);
-    Q = Q(:,1:lsteps);
+    lsteps = k*s;
+    T = real(T(1:lsteps,1:lsteps));
+    Q_ = Q{k};
+    Q = [Q{1:k-1} Q_(:,1:s)];
 end
 
 %% Returns a columnvector with n elements, in which all elements are 
@@ -87,17 +123,6 @@ function vec = eyeshvec(len)
     vec=circshift(vec,len-1);
 end
 
-%% A temporary fix.
-%% This function does a QR factorization of matrix A, and shifts
-%% the signs of the resulting factorization matrices such that R 
-%% only has positive values on its diagonals.
-function [Q,R] = pqr(A)
-    [Q,R] = qr(A,0);
-    d = sign(diag(R));
-    R = diag(d)*R;
-    Q = Q*diag(d);
-end
- 
 %% Compute s matrix-vector multiplications of A and q
 function V = matrix_powers(A,q,s)
     V = zeros(length(q),s);

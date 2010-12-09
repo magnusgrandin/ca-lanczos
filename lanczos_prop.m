@@ -11,7 +11,15 @@
 %   T   - tridiagonal Lanczos matrix
 %   Q   - matrix of Krylov basis vectors
 %--------------------------------------------------------------------------
-function [T,Q,nLanczos] = lanczos_prop(H,r0,maxiter,dt,tol)
+function [T,Q,nLanczos] = lanczos_prop(H,r0,maxiter,dt,tol,adaptive)
+
+    if nargin < 5
+        tol = 1.0e-10;
+    end
+    if nargin < 6
+        adaptive = false;
+    end
+    
     N = length(r0);
     Q = zeros(N,maxiter);
     nrm = norm(r0);
@@ -32,14 +40,15 @@ function [T,Q,nLanczos] = lanczos_prop(H,r0,maxiter,dt,tol)
         beta(j) = sqrt(r'*r);
             
         % Compute the residual and stop iterations if tolerance fulfilled
-        if(j > 2)
+        if j >= 3 
             T = diag(alpha(1:j)) + diag(beta(1:j-1),1) + diag(beta(1:j-1),-1);
             T = [T; [zeros(1,j-1), beta(j)]];
             [V,D] = eig(T(1:j,1:j));
             matexp = V*expm(-1i*dt*D)*V';
             residual = abs(dt*beta(j)*matexp(j,1)*nrm);
-            disp(['residual(', num2str(j), '): ', num2str(residual)]);
-            if residual < tol
+            %disp(['residual(', num2str(j), '): ', num2str(residual)]);
+            if (residual < tol) && (adaptive == true)
+                disp(num2str(residual));
                 break;
             end
         end

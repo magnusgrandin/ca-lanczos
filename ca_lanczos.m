@@ -58,9 +58,8 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
     maxlanczos = s*t;
     
     n = length(r);
-    b = zeros(s+1,1);
+    b = zeros(t+1,1);
     V = zeros(n,maxlanczos+1);
-    
     Q = {};
     
     rnorm = zeros(t,2);
@@ -72,7 +71,7 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
     
     
     has_converged = false;
-    k = 1;
+    k = 0;
     
     % Fix basis vectors
     if strcmpi(basis,'monomial')
@@ -80,18 +79,18 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
         Bk = I(:,2:s+1);        
     elseif strcmpi(basis,'newton')
         % Run standard Lanczos for 2s steps
-        T = lanczos(A,r,2*s);
+        T = lanczos(A,r,2*s,tol);
         basis_eigs = eig(T);
-        basis_shifts = leja(basis_eigs,'modified');
+        basis_shifts = leja(basis_eigs,'nonmodified');
         Bk = newton_basis_matrix(basis_shifts, s,1);
     else
         disp(['ERROR: Unknown basis', basis]);
     end
     
-    timeOrth = 0;
-
     while (k <= t) && (has_converged == false)
-            
+
+        k = k+1;
+
         if k > 1
             q = Q{k-1}(:,s+1);
         end
@@ -215,8 +214,6 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             orthl(k) = norm(eye(s*k)-Q_(:,1:s*k)'*Q_(:,1:s*k),'fro');
         end
         
-
-        k = k+1;
     end
     
     T = T(1:s*(k-1),:);

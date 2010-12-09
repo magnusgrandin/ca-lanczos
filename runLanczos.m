@@ -1,8 +1,8 @@
-numTimeSteps = 1000;
+numTimeSteps = 100;
 numLanczosSteps = 24;
 numRestarts = 1;
-s = 6;
-N=512; dt=0.01;
+s =6;
+N=256; dt=0.1;
 t=dt:dt:numTimeSteps*dt;
 e=ones(N,1);
 range=[-10 10];
@@ -43,7 +43,7 @@ psi_stlan(:,1) = psi;
 psi_calan(:,1) = psi;
 psi_sslan(:,1) = psi;
 
-%for k=2:numTimeSteps+1
+%for 2:numTimeSteps+1
     % Reference solution
 %    opts.isreal = 0;
 %    opts.issym  = 1;
@@ -74,7 +74,7 @@ eig_refnc = eig(H);
 disp('Standard Lanczos.');
 time_stlan = cputime;
 for k=2:numTimeSteps+1
-    [T,Q] = lanczos_prop(H, psi_stlan(:,k-1), numLanczosSteps, dt, 1.0e-10);
+    [T,Q] = lanczos_prop(H, psi_stlan(:,k-1), numLanczosSteps, dt, 1.0e-10, true);
     [V,D]=eig(T);
     nLanczos = size(T,1);
     psi_stlan(:,k) = ...
@@ -88,11 +88,12 @@ for k=2:numTimeSteps+1
 end
 time_stlan = cputime - time_stlan;
        
-% CA-lanczos
+% CA-Lanczos
 disp('CA-Lanczos.');
 time_calan = cputime;
 for k=2:numTimeSteps+1
-    [T,Q] = ca_lanczos_prop(H, psi_calan(:,k-1), s, numLanczosSteps/s, dt, 1.0e-10);
+    disp(['timestep ', num2str(k),'.']);
+    [T,Q] = ca_lanczos_prop(H, psi_calan(:,k-1), s, numLanczosSteps/s, dt, 1.0e-10,'monomial', true);
     [V,D] = eig(T);
     % Investigate whether or not we should use the inverse or
     % the complex conjugate    |  here
@@ -113,7 +114,7 @@ time_calan = cputime - time_calan;
 disp('s-step Lanczos.');
 time_sslan = cputime;
 for k=2:numTimeSteps+1
-    [T,Q] = sStepLanczos_prop(H, psi_sslan(:,k-1), s, numLanczosSteps/s, dt, 1.0e-10);
+    [T,Q] = sstep_lanczos_prop(H, psi_sslan(:,k-1), s, numLanczosSteps/s, dt, 1.0e-10);
 %    [T,Q] = sStepLanczos(H, psi_sslan(:,k-1), s, numLanczosSteps/s);
 %    nLanczos = numLanczosSteps;
     [V,D] = eig(T);
@@ -137,7 +138,7 @@ for k=2:numTimeSteps+1
     plot((0:n_calan-1)/(n_calan-1),sort(real(eig_calan),'descend'),'bo');
     plot((0:n_sslan-1)/(n_sslan-1),sort(real(eig_sslan),'descend'),'g*');
     
-    legend('Reference','Lanczos','CA-Lanczos'); %'s-Step Lanczos'
+    legend('Reference','Lanczos','CA-Lanczos','s-step Lanczos'); %'s-Step Lanczos'
      
      % Compute errors in eigenvalues
      smalleig_err_stlan(k) = abs(min(abs(eig_refnc)) - min(abs(eig_stlan)));
@@ -151,14 +152,17 @@ for k=2:numTimeSteps+1
 %disp(['Execution time:                ', num2str(time_refnc)]);
 disp('Standard Lanczos:');
 disp(['Execution time:                ', num2str(time_stlan)]);
+disp(['Number of Lanczos iterations:  ', num2str(n_stlan)]);
 disp(['Error in smallest eigenvalue:  ', num2str(max(smalleig_err_stlan))]);
 disp(['Error in largest eigenvalue:   ', num2str(max(largeeig_err_stlan))]);
 disp('CA-Lanczos:');
 disp(['Execution time:                ', num2str(time_calan)]);
+disp(['Number of Lanczos iterations:  ', num2str(n_calan)]);
 disp(['Error in smallest eigenvalue:  ', num2str(max(smalleig_err_calan))]);
 disp(['Error in largest eigenvalue:   ', num2str(max(largeeig_err_calan))]);
 disp('s-Step Lanczos:');
 disp(['Execution time:                ', num2str(time_sslan)]);
+disp(['Number of Lanczos iterations:  ', num2str(n_sslan)]);
 disp(['Error in smallest eigenvalue:  ', num2str(max(smalleig_err_sslan))]);
 disp(['Error in largest eigenvalue:   ', num2str(max(largeeig_err_sslan))]);
 
@@ -167,15 +171,29 @@ subplot(1,3,1);
 plot(x, real(psi_stlan(:,1)), x, imag(psi_stlan(:,1)), ...
      x, real(psi_stlan(:,numTimeSteps+1)), x, imag(psi_stlan(:,numTimeSteps+1)), ...
      x, abs(psi_stlan(:,numTimeSteps+1)));
-legend('Re(\Psi_{0})', 'Im(\Psi_{0})', 'Re(\Psi_{k})', 'Im(\Psi{k})', 'abs(\Psi{k})');
+legend('Re(\Psi_{0})', 'Im(\Psi_{0})', 'Re(\Psi_{k})', 'Im(\Psi_{k})', 'abs(\Psi_{k})');
 subplot(1,3,2);
 plot(x, real(psi_calan(:,1)), x, imag(psi_calan(:,1)), ...
      x, real(psi_calan(:,numTimeSteps+1)), x, imag(psi_calan(:,numTimeSteps+1)), ...
      x, abs(psi_calan(:,numTimeSteps+1)));
-legend('Re(\Psi_{0})', 'Im(\Psi_{0})', 'Re(\Psi_{k})', 'Im(\Psi{k})', 'abs(\Psi{k})');
+legend('Re(\Psi_{0})', 'Im(\Psi_{0})', 'Re(\Psi_{k})', 'Im(\Psi_{k})', 'abs(\Psi_{k})');
 subplot(1,3,3);
 plot(x, real(psi_sslan(:,1)), x, imag(psi_sslan(:,1)), ...
      x, real(psi_sslan(:,numTimeSteps+1)), x, imag(psi_sslan(:,numTimeSteps+1)), ...
      x, abs(psi_sslan(:,numTimeSteps+1)));
-legend('Re(\Psi_{0})', 'Im(\Psi_{0})', 'Re(\Psi_{k})', 'Im(\Psi{k})', 'abs(\Psi{k})');
+legend('Re(\Psi_{0})', 'Im(\Psi_{0})', 'Re(\Psi_{k})', 'Im(\Psi_{k})', 'abs(\Psi_{k})');
 figure;
+
+%     mass = params.mass[0];
+%     omega = params.potential[0][0].arg[0];
+%     gaussWaveFunction(Psi, 0, params.displacement, sqrt(1.0/(mass*omega)), params);
+
+%     ohmft = omega*params.timeMax;
+%     for(d = 0; d < NUM_DIMENSIONS; d++)
+%     {
+%         x0[d]    = (cos(ohmft))*params.displacement[d];
+%         p[d]     = (-mass*omega*sin(ohmft))*params.displacement[d];
+%         gamma[d] = -((mass*omega*pow(params.displacement[d],2.0)*cos(ohmft)*sin(ohmft))+(ohmft))/2.0;
+%     }
+%     gaussWaveFunctionComplex(PsiRef, 0, x0, sqrt(1.0/(mass*omega)), p, gamma, params);
+

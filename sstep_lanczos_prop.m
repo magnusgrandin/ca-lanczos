@@ -11,7 +11,7 @@
 %    T    - Tri-diagonal Lanczos matrix
 %    v    - Krylov subspace
 
-function [T,Q,lsteps]= sStepLanczos_prop(H,r0,s,m,dt,tol)
+function [T,Q,lsteps]= sstep_lanczos_prop(H,r0,s,m,dt,tol)
     N = length(r0);
     
     % Initialize some arrays
