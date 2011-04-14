@@ -43,8 +43,8 @@ time_ca_10=cputime;
 [T_ca_10,V_ca_10,r_ca_10,o_ca_10]=ca_lanczos(A,r0,10,m/10,'monomial',opt.break,opt.orth);
 time_ca_10=cputime-time_ca_10;
 time_ca_20=cputime;
-%[T_ca_20,V_ca_20,r_ca_20,o_ca_20]=ca_lanczos(A,r0,20,m/20,'newton',opt.break,opt.orth);
-%time_ca_20=cputime-time_ca_20;
+[T_ca_20,V_ca_20,r_ca_20,o_ca_20]=ca_lanczos(A,r0,20,m/20,'newton',opt.break,opt.orth);
+time_ca_20=cputime-time_ca_20;
 
 % Compute reference smallest and largest eigenvalues
 opts.disp=0;

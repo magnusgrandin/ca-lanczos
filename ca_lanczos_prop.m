@@ -54,7 +54,7 @@ function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
         
         if k == 1
             % QR factorization
-            [Q{1},Rk] = normalize(V(:,1:s+1));
+            [Q{1},Rk] = cholqr(V(:,1:s+1));
             
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
@@ -64,11 +64,11 @@ function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
             
         else
             % Orthogonality against previous block of basis vectors
-            [Q_,Rk_] = projectAndNormalize(Q(k-1),V(:,2:s+1),false);
+            Rkk_s = Q{k-1}'*V(:,2:s+1);
+            V(:,2:s+1) = V(:,2:s+1) - Q{k-1}*Rkk_s;
+            [Q_,Rk_s] = cholqr(V(:,2:s+1));
             Q{k} = [Q{k-1}(:,s+1) Q_(:,1:s)];
             Q{k-1} = Q{k-1}(:,1:s);
-            Rkk_s = Rk_{1};% Rk_(end-2*s:end-s,end-s+1:end);
-            Rk_s = Rk_{2};%Rk_(end-s+1:end,end-s+1:end);
             
             % Compute Tk (tridiagonal sub-matrix of T)
             Rkk = [zeros(s,1), Rkk_s(1:s,:)];
