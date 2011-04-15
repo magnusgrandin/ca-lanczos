@@ -69,6 +69,8 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
     q = (1/b0)*r;
     V(:,1) = q;
     
+    omega = [];
+    norm_A = normest(A);
     
     has_converged = false;
     k = 0;
@@ -79,7 +81,7 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
         Bk = I(:,2:s+1);        
     elseif strcmpi(basis,'newton')
         % Run standard Lanczos for 2s steps
-        T = lanczos(A,r,2*s,tol);
+        T = lanczos(A,r,2*s,1.0e-10);
         basis_eigs = eig(T);
         basis_shifts = leja(basis_eigs,'nonmodified');
         Bk = newton_basis_matrix(basis_shifts, s,1);
@@ -214,9 +216,14 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             orthl(k) = norm(eye(s*k)-Q_(:,1:s*k)'*Q_(:,1:s*k),'fro');
         end
         
+        alpha = diag(T,0);
+        beta  = diag(T,-1);
+        omega = update_omega(omega,alpha,beta,norm_A, s);
+        err = max(max(abs(omega - eye(size(omega)))));
+        err
     end
     
-    T = T(1:s*(k-1),:);
+    T = T(1:s*(k-1),1:s*(k-1));
     Q_ = [];
     for i = 1:k-1
         Q_ = [Q_ Q{i}];
@@ -257,5 +264,76 @@ function V = matrix_powers(A,q,s)
     V(:,1) = A*q;
     for i = 2:s
         V(:,i) = A*V(:,i-1);
+    end
+end
+
+function omega = update_omega(omega_in, alpha, beta, anorm, s)
+
+    % Get iteration number and block size
+    n = length(alpha);
+    m = size(omega_in,1)-1;
+    
+    % Estimate of contribution to roundoff errors from A*v:  fl(A*v) = A*v + f, 
+    T = eps*anorm;
+    binv = 1.0/beta(n);
+    
+    if isempty(omega_in) 
+        omega = zeros(s+1,s+1);
+        omega(1,1) = 1;
+        omega(1,2) = 0;
+        omega(2,1) = binv*T;
+        omega(2,2) = 1;
+
+        for j = 2:s
+            % k == 1, omega(j,k-1) == 0
+            omega(j+1,1) = beta(2)*omega(j,2) + (alpha(1)-alpha(j))*omega(j,1) - beta(j)*omega(j-1,1);
+            if omega(j+1,1) > 0
+                omega(j+1,1) = binv*(omega(j+1,1) + T);
+            else
+                omega(j+1,1) = binv*(omega(j+1,1) - T);
+            end
+            
+            % Update remaining components.
+            for k=2:j-1
+                omega(j+1,k) = beta(k+1)*omega(j,k+1) + (alpha(k)-alpha(j))*omega(j,k) + beta(k)*omega(j,k-1) - beta(j)*omega(j-1,k);
+                if omega(j+1,k) > 0 
+                    omega(j+1,k) = binv*(omega(j+1,k) + T);
+                else
+                    omega(j+1,k) = binv*(omega(j+1,k) - T);
+                end
+            end
+            
+            % k == j, k == j+1
+            omega(j+1,j) = binv*T;
+            omega(j+1,j+1) = 1;
+        end
+        
+    else
+        omega = zeros(n+1,n+1);
+        omega(1:m+1,1:m+1) = omega_in;
+        
+        for j = m+1:m+s
+            % k == 1, omega(j,k-1) == 0
+            omega(j+1,1) = beta(2)*omega(j,2) + (alpha(1)-alpha(j))*omega(j,1) - beta(j)*omega(j-1,1);
+            if omega(j+1,1) > 0
+                omega(j+1,1) = binv*(omega(j+1,1) + T);
+            else
+                omega(j+1,1) = binv*(omega(j+1,1) - T);
+            end
+            
+            % Update remaining components.
+            for k=2:j-1
+                omega(j+1,k) = beta(k+1)*omega(j,k+1) + (alpha(k)-alpha(j))*omega(j,k) + beta(k)*omega(j,k-1) - beta(j)*omega(j-1,k);
+                if omega(j+1,k) > 0 
+                    omega(j+1,k) = binv*(omega(j+1,k) + T);
+                else
+                    omega(j+1,k) = binv*(omega(j+1,k) - T);
+                end
+            end
+            
+            % k == j, k == j+1
+            omega(j+1,j) = binv*T;
+            omega(j+1,j+1) = 1;
+        end
     end
 end
