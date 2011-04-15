@@ -10,7 +10,7 @@
 %            modified Newton basis are to be used, else 0.  
 %            Defaults to zero.
 %
-function V = newton_basis(A, v, s, lambda, modifiedp)
+function V = matrix_powers_newton(A, v, s, lambda, modifiedp)
     if (nargin < 5)
         modifiedp = 0;
     end

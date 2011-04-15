@@ -22,13 +22,13 @@
 %     rnorm - vector of the residual norms in each iteration (optional)
 %     orthl - vector of level of orthogonality in each iteration (optional)
 %
-function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
+function [T,Q,ritz_rnorm,orth_err] = ca_lanczos(A,r,s,t,basis,orth)
 
+    global do_compute_ritz_rnorm;
+    global do_compute_orth_err;
+    
     % Check input arguments
     if nargin < 6
-        stop = 0;
-    end
-    if nargin < 7
         orth = 'local';
     else
         if isnumeric(orth)
@@ -41,11 +41,15 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             return;
         end
     end
-    
-    if (nargout >= 3) || (stop == 1) || strcmpi(orth,'local') == 0
-        solve_eigs_every_step = 1;
-    else
-        solve_eigs_every_step = 0;
+   
+    % Check required output arguments
+    do_compute_ritz_rnorm = false;
+    do_compute_orth_err = false;
+    if nargout >= 3
+        do_compute_ritz_rnorm = true;
+    end
+    if nargout >= 4 
+        do_compute_orth_err = true;
     end
  
     if strcmpi(orth,'local')
@@ -53,21 +57,18 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
     elseif strcmpi(orth,'full')
         disp('Full orthogonalization');
     end
-    
+
     t = ceil(t);             % To make sure that t is an integer
-    maxlanczos = s*t;
     
     n = length(r);
     b = zeros(t+1,1);
-    V = zeros(n,maxlanczos+1);
     Q = {};
     
-    rnorm = zeros(t,2);
-    orthl = zeros(t,1);
+    ritz_rnorm = zeros(t,2);
+    orth_err = zeros(t,1);
     
     b0 = norm(r);
     q = (1/b0)*r;
-    V(:,1) = q;
     
     omega = [];
     norm_A = normest(A);
@@ -75,7 +76,7 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
     has_converged = false;
     k = 0;
     
-    % Fix basis vectors
+    % Fix change-of-basis matrix
     if strcmpi(basis,'monomial')
         I = eye(s+1);
         Bk = I(:,2:s+1);        
@@ -86,9 +87,103 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
         basis_shifts = leja(basis_eigs,'nonmodified');
         Bk = newton_basis_matrix(basis_shifts, s,1);
     else
-        disp(['ERROR: Unknown basis', basis]);
+        disp(['ERROR: Unknown basis type: ', basis]);
     end
     
+    if strcmpi(orth,'local')
+        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_basic(A, q, s, t, Bk, basis);
+        return
+    elseif strcmpi(orth,'full')
+        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_basic(A, q, s, t, Bk, basis,'fro');
+        return
+    else
+        % Do nothing
+    end
+end
+
+function [ritz_rnorm] = compute_ritz_rnorm(A,Q,Vp,Dp,s)
+    
+    k = size(Q,2);
+    n = size(Q{1},1);
+    ritz_rnorm = [];
+
+    % Residual norm for smallest eigenpair
+    [d_s,i_s] = min(diag(Dp));
+    x_s = zeros(n,1);
+    for i = 1:k
+        x_s = x_s+Q{i}(:,1:s)*Vp(s*(i-1)+1:s*i,i_s);
+    end
+    ritz_rnorm(1) = norm(A*x_s-d_s*x_s)/norm(d_s*x_s);
+    
+    % Residual norm for largest eigenpair
+    [d_l,i_l] = max(diag(Dp));
+    x_l = zeros(n,1);
+    for i = 1:k
+        x_l = x_l+Q{i}(:,1:s)*Vp(s*(i-1)+1:s*i,i_l);
+    end
+    ritz_rnorm(2) = norm(A*x_l-d_l*x_l)/norm(d_l*x_l);
+end
+
+function [orth_err] = compute_orth_err(Q,s,k)
+           
+    Q_ = [];
+    for i = 1:k
+        Q_ = [Q_ Q{i}];
+    end
+    orth_err = norm(eye(s*k)-Q_(:,1:s*k)'*Q_(:,1:s*k),'fro');
+end
+
+% Compute matrix powers
+function V = matrix_powers(A, q, s, Bk, basis)
+    if strcmpi(basis,'monomial')
+        V(:,1) = q;
+        V(:,2:s+1) = matrix_powers_monomial(A, q, s);
+    elseif strcmpi(basis,'newton')
+        basis_shifts = diag(Bk);
+        V(:,1:s+1) = newton_basis(A, q, s, basis_shifts,1);
+    end
+end
+
+function Q = reorthogonalize(Q,iter,orth)
+    if strcmpi(orth,'full') == 1
+        M = length(Q);
+        ccols = 0;
+        for i=1:M
+            Q_ = Q{i};
+            [Q_,Rk_] = projectAndNormalize(Q(1:i-1), Q_);
+            Q{i} = Q_;
+        end
+    end
+end
+
+%% Returns a columnvector with n elements, in which all elements are 
+%% zero except the last element. 
+function vec = eyeshvec(len)
+    vec = eye(len,1);
+    vec=circshift(vec,len-1);
+end
+ 
+%% CA-Lanczos with local orthogonalization only.
+function [Q,T,rnorm,ortherr] = ca_lanczos_basic(A, q, s, t, Bk, basis, orth)
+    
+    global do_compute_ritz_rnorm;
+    global do_compute_orth_err;
+    
+    if nargin < 7
+        orth = 'local';
+    end
+    
+    b = zeros(t+1,1);
+    Q = {};
+
+    rnorm = zeros(t,2);
+    ortherr = zeros(t,1);
+    omega = [];
+    norm_A = normest(A);
+    
+    has_converged = false;
+    k = 0;
+
     while (k <= t) && (has_converged == false)
 
         k = k+1;
@@ -97,44 +192,35 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             q = Q{k-1}(:,s+1);
         end
         
-        % Compute matrix powers
-        if strcmpi(basis,'monomial')
-            V(:,1) = q;
-            V(:,2:s+1) = matrix_powers(A, q, s);
-        elseif strcmpi(basis,'newton')
-            V(:,1:s+1) = newton_basis(A, q, s, basis_shifts,1);
-        end
+        V = matrix_powers(A,q,s,Bk,basis);
         
         if k == 1
             % QR factorization
             [Q{1},Rk] = normalize(V(:,1:s+1));
-                        
+            
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
-
+            
             % Compute next beta
             b(k) = T(s+1,s);
             
         else
-            
             if strcmpi(orth,'local')
-                % Orthogonality against previous block of basis vectors
+                % Orthogonalize against previous block of basis vectors
                 [Q_,Rk_] = projectAndNormalize(Q(k-1),V(:,2:s+1),false);
                 Q{k} = [Q{k-1}(:,s+1) Q_(:,1:s)];
                 Q{k-1} = Q{k-1}(:,1:s);
                 Rkk_s = Rk_{1};% Rk_(end-2*s:end-s,end-s+1:end);
                 Rk_s = Rk_{2};%Rk_(end-s+1:end,end-s+1:end);
-            elseif strcmpi(orth,'full')
+            elseif strcmpi(orth,'fro')
                 % Orthogonality against all previous basis vectors
                 [Q_,Rk_] = projectAndNormalize(Q(k-1),V(:,2:s+1),false);
                 Rkk_s = Rk_{1};% Rk_(end-2*s:end-s,end-s+1:end);
-                Rk_s = Rk_{2};%Rk_(end-s+1:end,end-s+1:end);                
+                Rk_s = Rk_{2};%Rk_(end-s+1:end,end-s+1:end);
                 [Q_] = projectAndNormalize(Q,Q_,true);
                 Q{k} = [Q{k-1}(:,s+1) Q_(:,1:s)];
                 Q{k-1} = Q{k-1}(:,1:s);
             end
-            
-            %Q = reorthogonalize(Q,k,orth);
             
             % Compute Tk (tridiagonal sub-matrix of T)
             Rkk = [zeros(s,1), Rkk_s(1:s,:)];
@@ -161,111 +247,59 @@ function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
             T32 = b(k)*eyeshvec(s)';
             T = [T11, T12; T21, T22; T31, T32];
  
-        end   
+        end
         
-        if solve_eigs_every_step == 1
+        % Compute the ritz-norm, if it is required
+        if do_compute_ritz_rnorm
             [Vp,Dp] = eig(T(1:s*k,1:s*k));
+            rnorm(k,:) = compute_ritz_rnorm(A,Q,Vp,Dp,s);
         end
         
-        %[sorted_eigs,eig_order] = sort(diag(Dp));
-        %rnorms=zeros(1,s*k);
-        %for i = 1:s*k
-        %    rnorms(i) = b(k)*abs(Vp(s*k,eig_order(i)));
-        %end
-        %figure(1); plot(rnorms);
-        
-        rnormest = 0;
-        if (nargout >= 3) || (stop == 1)
-            % Residual norm for smallest eigenpair
-            [d_s,i_s] = min(diag(Dp));
-            s_s = Vp(s*k,i_s);
-            rnormest(1) = b(k)*abs(s_s);
-            %rnorm(k+1,1) = rnormest(1);
-            x_s = zeros(n,1);
-            for i = 1:k
-                x_s = x_s+Q{i}(:,1:s)*Vp(s*(i-1)+1:s*i,i_s);
-            end
-            rnorm(k,1) = norm(A*x_s-d_s*x_s)/norm(d_s*x_s);
-            
-            % Residual norm for largest eigenpair
-            [d_l,i_l] = max(diag(Dp));
-            s_l = Vp(s*k,i_l);
-            rnormest(2) = b(k)*abs(s_l);
-            %rnorm(k+1,2) = rnormest(2);
-            x_l = zeros(n,1);
-            for i = 1:k
-                x_l = x_l+Q{i}(:,1:s)*Vp(s*(i-1)+1:s*i,i_l);
-            end
-            rnorm(k,2) = norm(A*x_l-d_l*x_l)/norm(d_l*x_l);
+        % Compute the orthogonalization error, if it is required
+        if do_compute_orth_err
+            ortherr(k) = compute_orth_err(Q,s,k);
         end
         
-        % Check stopping criteria 
-        if stop == 1
-            min_rnorm = min([rnormest(1), rnormest(2)]);
-            if min_rnorm < norm(T)*sqrt(eps);
-                has_converged = true;
-            end
-        end
-
-        % Level of orthogonality
-        if nargout >= 4
-            Q_ = [];
-            for i = 1:k
-                Q_ = [Q_ Q{i}];
-            end
-            orthl(k) = norm(eye(s*k)-Q_(:,1:s*k)'*Q_(:,1:s*k),'fro');
-        end
-        
+        % TODO: This is just temporary
         alpha = diag(T,0);
         beta  = diag(T,-1);
         omega = update_omega(omega,alpha,beta,norm_A, s);
         err = max(max(abs(omega - eye(size(omega)))));
         err
+
     end
     
+    % Fix output
     T = T(1:s*(k-1),1:s*(k-1));
     Q_ = [];
     for i = 1:k-1
         Q_ = [Q_ Q{i}];
     end
     Q = Q_;
+    rnorm = rnorm(1:(k-1),:);
+    ortherr = ortherr(1:(k-1));
     
-    if nargout >= 3
-        rnorm = rnorm(1:(k-1),:);
-    end
-    if nargout >= 4
-        orthl = orthl(1:(k-1));
-    end
 end
 
-function Q = reorthogonalize(Q,iter,orth)
-    if strcmpi(orth,'full') == 1
-        M = length(Q);
-        ccols = 0;
-        for i=1:M
-            Q_ = Q{i};
-            [Q_,Rk_] = projectAndNormalize(Q(1:i-1), Q_);
-            Q{i} = Q_;
-        end
-    end
+function [V,T] = ca_lanczos_selective()
+
 end
 
-%% Returns a columnvector with n elements, in which all elements are 
-%% zero except the last element. 
-function vec = eyeshvec(len)
-    vec = eye(len,1);
-    vec=circshift(vec,len-1);
+function [V,T] = ca_lanczos_periodic()
+
+        % Update the omega matrix
+%        alpha = diag(T,0);
+%        beta  = diag(T,-1);
+%        omega = update_omega(omega,alpha,beta,norm_A, s);
+%        err = max(max(abs(omega - eye(size(omega)))));
+%        err
+
 end
- 
-%% Compute s matrix-vector multiplications of A and q using 
-%% the monomial basis
-function V = matrix_powers(A,q,s)
-    V = zeros(length(q),s);
-    V(:,1) = A*q;
-    for i = 2:s
-        V(:,i) = A*V(:,i-1);
-    end
+
+function [V,T] = ca_lanczos_partial()
+
 end
+
 
 function omega = update_omega(omega_in, alpha, beta, anorm, s)
 

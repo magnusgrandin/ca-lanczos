@@ -21,8 +21,8 @@ end
 r0=rand(n,1);
 
 % Lanczos options
-opt.break = 0;
-opt.orth = 'local';
+opt.break = 0; %TODO: Remove
+opt.orth = 'full';
 
 % Standard Lanczos
 time_st=cputime;
@@ -31,19 +31,19 @@ time_st=cputime-time_st;
 
 % CA-Lanczos, for several values of s
 time_ca_4=cputime;
-[T_ca_4,V_ca_4,r_ca_4,o_ca_4]=ca_lanczos(A,r0,4,m/4,'monomial',opt.break,opt.orth);
+[T_ca_4,V_ca_4,r_ca_4,o_ca_4]=ca_lanczos(A,r0,4,m/4,'monomial',opt.orth);
 time_ca_4=cputime-time_ca_4;
 time_ca_6=cputime;
-[T_ca_6,V_ca_6,r_ca_6,o_ca_6]=ca_lanczos(A,r0,6,m/6,'monomial',opt.break,opt.orth);
+[T_ca_6,V_ca_6,r_ca_6,o_ca_6]=ca_lanczos(A,r0,6,m/6,'monomial',opt.orth);
 time_ca_6=cputime-time_ca_6;
 time_ca_8=cputime;
-[T_ca_8,V_ca_8,r_ca_8,o_ca_8]=ca_lanczos(A,r0,8,m/8,'monomial',opt.break,opt.orth);
+[T_ca_8,V_ca_8,r_ca_8,o_ca_8]=ca_lanczos(A,r0,8,m/8,'monomial',opt.orth);
 time_ca_8=cputime-time_ca_8;
 time_ca_10=cputime;
-[T_ca_10,V_ca_10,r_ca_10,o_ca_10]=ca_lanczos(A,r0,10,m/10,'monomial',opt.break,opt.orth);
+[T_ca_10,V_ca_10,r_ca_10,o_ca_10]=ca_lanczos(A,r0,10,m/10,'monomial',opt.orth);
 time_ca_10=cputime-time_ca_10;
 time_ca_20=cputime;
-%[T_ca_20,V_ca_20,r_ca_20,o_ca_20]=ca_lanczos(A,r0,20,m/20,'newton',opt.break,opt.orth);
+%[T_ca_20,V_ca_20,r_ca_20,o_ca_20]=ca_lanczos(A,r0,20,m/20,'newton',opt.orth);
 %time_ca_20=cputime-time_ca_20;
 
 % Compute reference smallest and largest eigenvalues
