@@ -53,6 +53,7 @@ function [T,Q,nLanczos] = lanczos_prop(H,r0,maxiter,dt,tol,adaptive)
             end
         end
     end
+    disp(num2str(residual));
     nLanczos = j;
     T = T(1:nLanczos,:);
     Q = Q(:,1:nLanczos);

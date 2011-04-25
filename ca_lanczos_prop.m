@@ -47,14 +47,14 @@ function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
         % Compute matrix powers
         if strcmpi(basis,'monomial')
             V(:,1) = q;
-            V(:,2:s+1) = matrix_powers(A, q, s);
+            V(:,2:s+1) = matrix_powers_monomial(A, q, s);
         elseif strcmpi(basis,'newton')
-            V(:,1:s+1) = newton_basis(A, q, s, basis_shifts,1);
+            V(:,1:s+1) = matrix_powers_newton(A, q, s, basis_shifts,1);
         end
         
         if k == 1
             % QR factorization
-            [Q{1},Rk] = cholqr(V(:,1:s+1));
+            [Q{1},Rk] = tsqr(V(:,1:s+1));
             
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
@@ -66,7 +66,7 @@ function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
             % Orthogonality against previous block of basis vectors
             Rkk_s = Q{k-1}'*V(:,2:s+1);
             V(:,2:s+1) = V(:,2:s+1) - Q{k-1}*Rkk_s;
-            [Q_,Rk_s] = cholqr(V(:,2:s+1));
+            [Q_,Rk_s] = tsqr(V(:,2:s+1));
             Q{k} = [Q{k-1}(:,s+1) Q_(:,1:s)];
             Q{k-1} = Q{k-1}(:,1:s);
             
@@ -110,6 +110,7 @@ function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
             end
         end
     end
+    disp(num2str(residual));    
     lsteps = k*s;
     T = real(T(1:lsteps,1:lsteps));
     Q_ = Q{k};

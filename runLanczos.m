@@ -72,7 +72,7 @@ eig_refnc = eig(H);
 
 % Std Lanczos
 disp('Standard Lanczos.');
-time_stlan = cputime;
+tic;
 for k=2:numTimeSteps+1
     [T,Q] = lanczos_prop(H, psi_stlan(:,k-1), numLanczosSteps, dt, 1.0e-10, true);
     [V,D]=eig(T);
@@ -86,14 +86,13 @@ for k=2:numTimeSteps+1
     V_stlan = V;
     D_stlan = D;
 end
-time_stlan = cputime - time_stlan;
+time_stlan = toc;
        
 % CA-Lanczos
 disp('CA-Lanczos.');
-time_calan = cputime;
+tic;
 for k=2:numTimeSteps+1
-    disp(['timestep ', num2str(k),'.']);
-    [T,Q] = ca_lanczos_prop(H, psi_calan(:,k-1), s, numLanczosSteps/s, dt, 1.0e-10,'monomial', true);
+    [T,Q] = ca_lanczos_prop(H, psi_calan(:,k-1), s, numLanczosSteps/s, dt, 1.0e-10,'newton', true);
     [V,D] = eig(T);
     % Investigate whether or not we should use the inverse or
     % the complex conjugate    |  here
@@ -108,11 +107,11 @@ for k=2:numTimeSteps+1
     V_calan = V;
     D_calan = D;
 end
-time_calan = cputime - time_calan;
+time_calan = toc;
 
 % s-Step Lanczos
 disp('s-step Lanczos.');
-time_sslan = cputime;
+tic;
 for k=2:numTimeSteps+1
     [T,Q] = sstep_lanczos_prop(H, psi_sslan(:,k-1), s, numLanczosSteps/s, dt, 1.0e-10);
 %    [T,Q] = sStepLanczos(H, psi_sslan(:,k-1), s, numLanczosSteps/s);
@@ -128,7 +127,7 @@ for k=2:numTimeSteps+1
     V_sslan = V;
     D_sslan = D;
 end
-time_sslan = cputime - time_sslan;
+time_sslan = toc;
 
 % Plot eigenvalues on the interval [0 1]
 figure(1); hold on;
