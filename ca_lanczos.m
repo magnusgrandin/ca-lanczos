@@ -34,10 +34,10 @@ function [T,Q,ritz_rnorm,orth_err] = ca_lanczos(A,r,s,t,basis,orth)
         if isnumeric(orth)
             orth = num2str(orth);
         end
-        if strcmpi(orth,'local')==0 && strcmpi(orth,'full')==0 && strcmpi(orth,'selective')==0 ...
-                && strcmpi(orth,'periodic')==0 && stcmpi(orth,'partial')
+        if strcmpi(orth,'local')==0 && strcmpi(orth,'full')==0 ...
+                && strcmpi(orth,'selective')==0 && strcmpi(orth,'periodic')==0
             disp(['ca_lanczos.m: Invalid option value for orth: ', orth]);
-            disp('    expected {''local''|''full''|''periodic''|''partial''|''selective''}');
+            disp('    expected {''local''|''full''|''periodic''|''selective''}');
             return;
         end
     end
@@ -58,9 +58,6 @@ function [T,Q,ritz_rnorm,orth_err] = ca_lanczos(A,r,s,t,basis,orth)
         disp('Full orthogonalization');
     elseif strcmpi(orth,'periodic')
         disp('Periodic orthogonalization');
-    elseif strcmpi(orth,'partial')
-        disp('Partial orthogonalization (not yet implemented)');
-        return;
     elseif strcmpi(orth,'selective')
         disp('Selective orthogonalization');
     end
@@ -94,8 +91,6 @@ function [T,Q,ritz_rnorm,orth_err] = ca_lanczos(A,r,s,t,basis,orth)
         [Q,T,ritz_rnorm,orth_err] = ca_lanczos_basic(A, q, s, t, Bk, basis,'fro');
     elseif strcmpi(orth,'periodic')
         [Q,T,ritz_rnorm,orth_err] = ca_lanczos_periodic(A, q, s, t, Bk, basis);
-    elseif strcmpi(orth,'partial')
-        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_partial(A, q, s, t, Bk, basis);
     elseif strcmpi(orth,'selective')
         [Q,T,ritz_rnorm,orth_err] = ca_lanczos_selective(A, q, s, t, Bk, basis);
     else
@@ -155,6 +150,19 @@ function Q = reorthogonalize(Q)
     end
 end
 
+function y = blockVectorTimesVector(Q, v)
+    n = size(Q{1},1);
+    y = zeros(n,1);
+    cols = 0;
+    for l=1:length(Q)-1
+        ncols = size(Q{l},2);
+        y = y + Q{l}*v(cols+1:cols+ncols);
+        cols = cols+ncols;
+    end
+    ncols = size(Q{end},2);
+    y = y + Q{end}(:,1:ncols-1)*v(cols+1:cols+ncols-1);
+end
+
 %% Returns a columnvector with n elements, in which all elements are 
 %% zero except the last element. 
 function vec = eyeshvec(len)
@@ -196,13 +204,10 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_basic(A, q, s, t, Bk, basis, orth)
         if k == 1
             % QR factorization
             [Q{1},Rk] = normalize(V(:,1:s+1));
-            
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
-            
             % Compute next beta
             b(k) = T(s+1,s);
-            
         else
             if strcmpi(orth,'local')
                 % Orthogonalize against previous block of basis vectors
@@ -285,6 +290,8 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
     global do_compute_ritz_rnorm;
     global do_compute_orth_err;
     
+    norm_A = normest(A);
+    norm_sqrt_eps = norm_A*sqrt(eps);
     n = size(A,1);
     b = zeros(t+1,1);
     nritz = 0;
@@ -293,11 +300,10 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
     rnorm = zeros(t,2);
     ortherr = zeros(t,1);
     omega = [];
-    norm_A = normest(A);
     
     has_converged = false;
     k = 0;
-
+    
     while (k <= t) && (has_converged == false)
 
         k = k+1;
@@ -310,10 +316,8 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
         if k == 1
             % QR factorization
             [Q{1},Rk] = normalize(V(:,1:s+1));
-            
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
-            
             % Compute next beta
             b(k) = T(s+1,s);
             
@@ -357,24 +361,16 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
         [Vp,Dp] = eig(T(1:s*k,1:s*k));
         nritz_new = 0;
         for i = 1:k*s
-            if abs(beta(i)*Vp(s*k,i)) < norm_A*sqrt(eps)
+            if abs(beta(i)*Vp(s*k,i)) < norm_sqrt_eps
                 nritz_new = nritz_new+1;
             end
         end
         if nritz_new > nritz
             nritz = 0;
             for i = 1:k*s
-                if abs(beta(i)*Vp(s*k,i)) < norm_A*sqrt(eps)
+                if abs(beta(i)*Vp(s*k,i)) < norm_sqrt_eps
                     nritz = nritz+1;
-                    y = zeros(n,1);
-                    cols = 0;
-                    for l=1:length(Q)-1
-                        ncols = size(Q{l},2);
-                        y = y + Q{l}*Vp(cols+1:cols+ncols,i);
-                        cols = cols+ncols;
-                    end
-                    ncols = size(Q{end},2);
-                    y = y + Q{end}(:,1:ncols-1)*Vp(cols+1:cols+ncols-1,i);
+                    y = blockVectorTimesVector(Q, Vp(:,i));
                     QR(:,nritz) = y;
                 end
             end
@@ -436,10 +432,8 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, s, t, Bk, basis)
         if k == 1
             % QR factorization
             [Q{1},Rk] = normalize(V(:,1:s+1));
-            
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
-            
             % Compute next beta
             b(k) = T(s+1,s);
             
@@ -488,13 +482,12 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, s, t, Bk, basis)
             ortherr(k) = compute_orth_err(Q,s,k);
         end
         
-        % TODO: This is just temporary
+        % Estimate orthogonalization error, reorthogonalize if necessary
         alpha = diag(T,0);
         beta  = diag(T,-1);
         omega = update_omega(omega,alpha,beta,norm_A, s);
         err = max(max(abs(omega - eye(size(omega)))));
         if err >= norm_A*sqrt(eps)
-            %Q = reorthogonalize(Q);
             Q{k} = projectAndNormalize(Q(1:k-1),Q{k},false);
             omega = reset_omega(omega, norm_A, s);
         end
@@ -511,11 +504,6 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, s, t, Bk, basis)
     ortherr = ortherr(1:(k-1));
 
 end
-
-function [V,T] = ca_lanczos_partial()
-
-end
-
 
 function omega = update_omega(omega_in, alpha, beta, anorm, s)
 

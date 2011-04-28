@@ -24,7 +24,7 @@ r0=rand(n,1);
 
 % Lanczos options
 opt.break = 0; %TODO: Remove
-opt.orth = 'selective';
+opt.orth = 'periodic';
 
 % Standard Lanczos
 time_st=cputime;

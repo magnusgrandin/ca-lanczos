@@ -27,10 +27,10 @@ function [T,V,rnorm,orthl] = lanczos(A,r0,maxiter,stop,orth)
         if isnumeric(orth)
             orth = num2str(orth);
         end
-        if strcmpi(orth,'local')==0 && strcmpi(orth,'full')==0 && strcmpi(orth,'selective')==0 ...
-                && strcmpi(orth,'periodic')==0 && strcmpi(orth,'partial')==0 
+        if strcmpi(orth,'local')==0 && strcmpi(orth,'full')==0 ...
+                && strcmpi(orth,'selective')==0 && strcmpi(orth,'periodic')==0
             disp(['lanczos.m: Invalid option value for orth: ', orth]);
-            disp('    expected {''local''|''full''|''periodic''|''partial''|''selective''}');
+            disp('    expected {''local''|''full''|''periodic''|''selective''}');
             return;
         end
     end
