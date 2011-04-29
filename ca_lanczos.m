@@ -253,7 +253,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
     global g_ca_lanczos_do_compute_orth_err;
     
     norm_A = normest(A);
-    norm_sqrt_eps = (1/s^2)*norm_A*sqrt(eps);
+    norm_sqrt_eps = norm_A*sqrt(eps); %(1/s^2)
     n = size(A,1);
     b = zeros(t+1,1);
     nritz = 0;
@@ -283,7 +283,8 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
             b(k) = T(s+1,s);
             
         else
-            % Orthogonalize against previous block of basis vectors
+            % Orthogonalize against previous block of basis vectors and the
+            % already converged ritz vectors
             [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),false);
             Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
             Rkk_s = Rk_{1};
@@ -315,12 +316,12 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
             T = [T11, T12; T21, T22; T31, T32];
         end
         
-        % Estimate orthogonalization error, reorthogonalize if necessary
+%         % Estimate orthogonalization error, reorthogonalize if necessary
 %         alpha = diag(T,0);
 %         beta  = diag(T,-1);
 %         omega = update_omega(omega,alpha,beta,norm_A, s);
 %         err = max(max(abs(omega - eye(size(omega)))));
-%         if err > norm_sqrt_eps
+%         if err > sqrt(eps)
 %             nritz = 0;
 %             [Vp,Dp] = eig(T(1:s*k,1:s*k));
 %             for i = k*s
@@ -332,7 +333,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
 %             end
 %             omega = reset_omega(omega, norm_A, s);
 %         end
-%         
+        
         beta = diag(T,-1);
         % Compute eigenvalues (Dp) and eigenvectors (Vp) of projection matrix T
         [Vp,Dp] = eig(T(1:s*k,1:s*k));
@@ -351,15 +352,17 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
                     QR(:,nritz) = y;
                 end
             end
+            QR(:,1:nritz) = normalize(QR(:,1:nritz));
         end
-        
-        if ~isempty(QR)
-            Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({QR},Q(:,(k-1)*s+2:k*s+1),false);
+        disp(['nritz=' num2str(nritz)])
+       
+        if nritz > 0
+            Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({QR(:,1:nritz)},Q(:,(k-1)*s+2:k*s+1),false);
         end
         
         % Compute the ritz-norm, if it is required
         if g_ca_lanczos_do_compute_ritz_rnorm
-            [Vp,Dp] = eig(T(1:s*k,1:s*k));
+            %[Vp,Dp] = eig(T(1:s*k,1:s*k));
             rnorm(k,:) = compute_ritz_rnorm(A,Q(:,1:s*k),Vp,Dp);
         end
         

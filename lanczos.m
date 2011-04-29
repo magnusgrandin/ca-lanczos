@@ -196,7 +196,7 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A,q,maxiter)
             end
         end       
         if nritz > 0
-            Q(:,j+1) = projectAndNormalize({QR},Q(:,j+1),false);
+            Q(:,j+1) = projectAndNormalize({QR(:,1:nritz)},Q(:,j+1),false);
         end
      
         % Compute the ritz-norm, if it is required
