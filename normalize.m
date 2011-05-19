@@ -1,7 +1,7 @@
 function [Q,R,rank] = normalize(X,tol,opt)
 
     if nargin < 2
-        tol = 1.0e-10;
+        tol = 1.0e-12;
     end
     if nargin < 3
         opt = 'none';
