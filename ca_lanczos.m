@@ -420,7 +420,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, s, t, Bk, basis)
             
         else
             % Orthogonalize against previous block of basis vectors
-            [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),true);
+            [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),false);
             Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
             Rkk_s = Rk_{1};
             Rk_s = Rk_{2};

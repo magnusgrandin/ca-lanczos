@@ -5,9 +5,6 @@ load(matrix);
 Problem
 A=Problem.A;
 n=size(A,1);
-%N=1000; A=sparse(1:N, 1:N, rand(N,1), N, N);
-
-%disp(['Estimated condition number of A: ', num2str(condest(A))]);
 
 % Total number of Lanczos steps (maximum)
 if nargin >= 2 && isempty(steps)
