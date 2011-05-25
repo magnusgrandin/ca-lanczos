@@ -68,28 +68,18 @@ function [T,Q,ritz_rnorm,orth_err] = ca_lanczos(A,r,s,t,basis,orth)
     % Normalize the starting vector
     q = r/norm(r);
     
-    % Fix change-of-basis matrix
-    if strcmpi(basis,'monomial')
-        I = eye(s+1);
-        Bk = I(:,2:s+1);        
-    elseif strcmpi(basis,'newton')
-        % Run standard Lanczos for 2s steps
-        T = lanczos(A,r,2*s,'full');
-        basis_eigs = eig(T);
-        basis_shifts = leja(basis_eigs,'nonmodified');
-        Bk = newton_basis_matrix(basis_shifts, s,1);
-    else
+    if ~strcmpi(basis,'monomial') && ~strcmpi(basis,'newton')
         disp(['ERROR: Unknown basis type: ', basis]);
     end
     
     if strcmpi(orth,'local')
-        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_basic(A, q, s, t, Bk, basis);
+        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_basic(A, q, s, t, basis);
     elseif strcmpi(orth,'full')
-        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_basic(A, q, s, t, Bk, basis,'fro');
+        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_basic(A, q, s, t, basis,'fro');
     elseif strcmpi(orth,'periodic')
-        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_periodic(A, q, s, t, Bk, basis);
+        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_periodic(A, q, s, t, basis);
     elseif strcmpi(orth,'selective')
-        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_selective(A, q, s, t, Bk, basis);
+        [Q,T,ritz_rnorm,orth_err] = ca_lanczos_selective(A, q, s, t, basis);
     else
         % Do nothing
     end
@@ -152,19 +142,32 @@ function vec = eyeshvec(len)
 end
  
 %% CA-Lanczos with local or full orthogonalization.
-function [Q,T,rnorm,ortherr] = ca_lanczos_basic(A, q, s, t, Bk, basis, orth)
+function [Q,T,rnorm,ortherr] = ca_lanczos_basic(A, q, s, t, basis, orth)
     
     global g_ca_lanczos_do_compute_ritz_rnorm;
     global g_ca_lanczos_do_compute_orth_err;
     
-    if nargin < 7
+    if nargin < 6
         orth = 'local';
     end
     
     b = zeros(t+1,1);
     rnorm = zeros(t,2);
     ortherr = zeros(t,1);   
-
+    T = [];
+    
+    % Fix change-of-basis matrix
+    if strcmpi(basis,'monomial')
+        I = eye(s+1);
+        Bk = I(:,2:s+1);        
+    elseif strcmpi(basis,'newton')
+        % Run standard Lanczos for 2s steps
+        T = lanczos(A,q,2*s,'full');
+        basis_eigs = eig(T);
+        basis_shifts = leja(basis_eigs,'nonmodified');
+        Bk = newton_basis_matrix(basis_shifts, s,1);
+    end
+    
     has_converged = false;
     k = 0;
     while (k <= t) && (has_converged == false)
@@ -247,7 +250,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_basic(A, q, s, t, Bk, basis, orth)
     
 end
 
-function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
+function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, basis)
 
     global g_ca_lanczos_do_compute_ritz_rnorm;
     global g_ca_lanczos_do_compute_orth_err;
@@ -261,6 +264,18 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
     rnorm = zeros(t,2);
     ortherr = zeros(t,1);
     omega = [];
+    
+    % Fix change-of-basis matrix
+    if strcmpi(basis,'monomial')
+        I = eye(s+1);
+        Bk = I(:,2:s+1);        
+    elseif strcmpi(basis,'newton')
+        % Run standard Lanczos for 2s steps
+        T = lanczos(A,q,2*s,'full');
+        basis_eigs = eig(T);
+        basis_shifts = leja(basis_eigs,'nonmodified');
+        Bk = newton_basis_matrix(basis_shifts, s,1);
+    end
     
     has_converged = false;
     k = 0;
@@ -319,7 +334,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
             T = [T11, T12; T21, T22; T31, T32];
         end
         
-%         Estimate orthogonalization error, reorthogonalize if necessary
+        % Estimate orthogonalization error, reorthogonalize if necessary
 %         alpha = diag(T,0);
 %         beta  = diag(T,-1);
 %         omega = update_omega(omega,alpha,beta,norm_A, s);
@@ -339,10 +354,10 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
 %             omega = reset_omega(omega, norm_A, s);
 %         end
         
-        
+
         beta = diag(T,-1);
         [Vp,Dp] = eig(T(1:s*k,1:s*k));
-        
+
         nritz_new = 0;
         for i = 1:k*s
             if beta(i)*abs(Vp(s*k,i)) < norm_sqrt_eps
@@ -386,7 +401,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, s, t, Bk, basis)
     ortherr = ortherr(1:(k-1));
 end
 
-function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, s, t, Bk, basis)
+function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, s, t, basis)
 
     global g_ca_lanczos_do_compute_ritz_rnorm;
     global g_ca_lanczos_do_compute_orth_err;
@@ -396,10 +411,21 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, s, t, Bk, basis)
     ortherr = zeros(t,1);
     omega = [];
     norm_A = normest(A);
+
+    % Fix change-of-basis matrix
+    if strcmpi(basis,'monomial')
+        I = eye(s+1);
+        Bk = I(:,2:s+1);        
+    elseif strcmpi(basis,'newton')
+        % Run standard Lanczos for 2s steps
+        T = lanczos(A,q,2*s,'full');
+        basis_eigs = eig(T);
+        basis_shifts = leja(basis_eigs,'nonmodified');
+        Bk = newton_basis_matrix(basis_shifts, s,1);
+    end
     
     has_converged = false;
     k = 0;
-
     while (k <= t) && (has_converged == false)
 
         k = k+1;
