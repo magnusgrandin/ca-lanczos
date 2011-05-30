@@ -224,9 +224,8 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, or
         orth = 'local';
     end
   
-    max_lanczos = maxiter*s;
     n = length(q);
-    Q = zeros(n,maxiter);
+    Q = zeros(n,maxiter*s);
     Q(:,1) = q;
     b = zeros(maxiter+1,1);
     T = [];
@@ -246,9 +245,8 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, or
         Bk = newton_basis_matrix(basis_shifts, s,1);
     end
     
-    has_converged = false;
     k = 0;
-    while (k <= maxiter) && (has_converged == false)
+    while k <= maxiter
 
         k = k+1;
 
@@ -261,6 +259,8 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, or
         if k == 1
             % QR factorization
             [Q(:,1:s+1),Rk] = normalize(V(:,1:s+1));
+            % Orthogonalize against already converged basis vectors
+            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),false);
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta
@@ -268,19 +268,16 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, or
         else
             if strcmpi(orth,'local')
                 % Orthogonalize against previous block of basis vectors
-                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),false);
+                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q_conv},V(:,2:s+1),false);
                 Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
                 Rkk_s = Rk_{1};
-                Rk_s = Rk_{2};
-                [Q_] = projectAndNormalize({Q_conv},Q_,false);
-                Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
+                Rk_s = Rk_{3};
             elseif strcmpi(orth,'fro')
                 % Orthogonality against all previous basis vectors
-                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),false);
-                Rkk_s = Rk_{1};
-                Rk_s = Rk_{2};
-                [Q_] = projectAndNormalize({Q_conv,Q},Q_);
+                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q(:,1:(k-1)*s+1),Q_conv},V(:,2:s+1),false);
                 Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
+                Rkk_s = Rk_{1};
+                Rk_s = Rk_{4};
             end
             
             % Compute Tk (tridiagonal sub-matrix of T)
@@ -330,80 +327,127 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, or
 end
 
 function [Q,T,rnorm,ortherr] = lanczos_selective(A, Q_conv, q, maxiter, s, basis, do_ritz_norm, do_orth_err)
-
-    global g_lanczos_do_compute_ritz_rnorm;
-    global g_lanczos_do_compute_orth_err;
     
     n = length(q);
-    Q = zeros(n,maxiter);
-    QR = zeros(n,maxiter);
+    Q = zeros(n,maxiter*s);
+    QR = [];
     Q(:,1) = q;
-    alpha = zeros(1,maxiter);
-    beta = zeros(1,maxiter);
+    b = zeros(maxiter+1,1);
+    T = [];
+    Bk = [];
     rnorm = zeros(maxiter,2);
     ortherr = zeros(maxiter,1);
-    norm_A = normest(A);
-    norm_sqrt_eps = norm_A*sqrt(eps);
+    norm_sqrt_eps = normest(A)*sqrt(eps);
     nritz = 0;
     
-    has_converged = false;
-    j = 1;
     
-    while (j <= maxiter) && (has_converged == false)
-        r = A*Q(:,j);
-        if j > 1
-            r=r-beta(j-1)*Q(:,j-1);
-        end
-        alpha(j) = r'*Q(:,j);
-        r = r - alpha(j)*Q(:,j);
-        beta(j) = sqrt(r'*r);
-        Q(:,j+1) = r/beta(j);
-     
-        % Orthogonalize against the locked basis vectors
-        Q(:,j+1) = orthogonalize(Q_conv,Q(:,j+1));
+    % Fix change-of-basis matrix
+    if strcmpi(basis,'monomial')
+        I = eye(s+1);
+        Bk = I(:,2:s+1);        
+    elseif strcmpi(basis,'newton')
+        % Run standard Lanczos for 2s steps
+        T = lanczos(A,q,2*s,'full');
+        basis_eigs = eig(T);
+        basis_shifts = leja(basis_eigs,'nonmodified');
+        Bk = newton_basis_matrix(basis_shifts, s,1);
+    end
+    
+    k = 0;
+    while k <= maxiter
 
-        T = diag(alpha(1:j)) + diag(beta(1:j-1),1) + diag(beta(1:j-1),-1);
-        [Vp,Dp] = eig(T);
+        k = k+1;
+
+        if k > 1
+            q = Q(:,(k-1)*s+1);
+        end
+        
+        V = matrix_powers(A,q,s,Bk,basis);
+        
+        if k == 1
+            % QR factorization
+            [Q(:,1:s+1),Rk] = normalize(V(:,1:s+1));
+            % Orthogonalize against already converged basis vectors
+            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),false);
+            % Compute first part of tridiagonal matrix
+            T = Rk*Bk/Rk(1:s,1:s);
+            % Compute next beta
+            b(k) = T(s+1,s);
+            
+        else
+            % Orthogonalize against previous block of basis vectors and the
+            % already converged ritz vectors
+            [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q_conv,QR(:,1:nritz)},V(:,2:s+1),false);
+            Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
+            Rkk_s = Rk_{1};
+            Rk_s = Rk_{4};
+            
+            % Compute Tk (tridiagonal sub-matrix of T)
+            Rkk = [zeros(s,1), Rkk_s(1:s,:)];
+            Rk = [eye(s+1,1), [Rkk_s(s+1,1:s);Rk_s]];
+            zk = Rk(1:s,s+1);
+            rho = Rk(s+1,s+1);
+            rho_t = Rk(s,s);
+            bk = Bk(s+1,s);
+            e1 = eye(s,1);
+            es = eyeshvec(s);
+            Tk = Rk(1:s,1:s)*Bk(1:s,:)/Rk(1:s,1:s) ...  %% <-- Warnings for bad scaling of matrix
+                + (bk/rho_t)*zk*es' ...
+                - b(k-1)*e1*es'*Rkk(1:s,1:s)/Rk(1:s,1:s);
+
+            % Compute the next beta
+            b(k) = bk*(rho/rho_t);
+            
+            % Extend T
+            T11 = T(1:s*(k-1),1:s*(k-1));
+            T12 = b(k-1)*eyeshvec(s*(k-1))*eye(s,1)';
+            T21 = b(k-1)*eye(s,1)*eyeshvec(s*(k-1))';
+            T22 = Tk;
+            T31 = zeros(1,s*(k-1));
+            T32 = b(k)*eyeshvec(s)';
+            T = [T11, T12; T21, T22; T31, T32];
+        end
+
+        [Vp,Dp] = eig(T(1:s*k,1:s*k));
+
         nritz_new = 0;
-        for i = 1:j
-            if beta(j)*abs(Vp(j,i)) < norm_sqrt_eps
+        for i = 1:k*s
+            if b(k)*abs(Vp(s*k,i)) < norm_sqrt_eps
                 nritz_new = nritz_new+1;
             end
         end
         if nritz_new > nritz
             nritz = 0;
-            for i = 1:j
-                if beta(j)*abs(Vp(j,i)) < norm_sqrt_eps
+            for i = 1:k*s
+                if b(k)*abs(Vp(s*k,i)) < norm_sqrt_eps
                     nritz = nritz+1;
-                    y = Q(:,1:j)*Vp(:,i);
+                    y = Q(:,1:k*s)*Vp(:,i);
                     QR(:,nritz) = y;
                 end
             end
-        end       
-        if nritz > 0
-            Q(:,j+1) = orthogonalize(QR(:,1:nritz),Q(:,j+1));
+            QR(:,1:nritz) = normalize(QR(:,1:nritz));
         end
-     
+
+        disp(['nritz=' num2str(nritz)])
+       
         % Compute the ritz-norm, if it is required
-        if g_lanczos_do_compute_ritz_rnorm && j > 2
-            T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
-            [Vp,Dp] = eig(T);
-            rnorm(j,:) = compute_ritz_rnorm(A,Q(:,1:j-1),Vp,Dp);
+        if do_ritz_norm
+            %[Vp,Dp] = eig(T(1:s*k,1:s*k));
+            rnorm(k,:) = compute_ritz_rnorm(A,Q(:,1:s*k),Vp,Dp);
         end
         
         % Compute the orthogonalization error, if it is required
-        if g_lanczos_do_compute_orth_err && j > 2
-            ortherr(j) = compute_orth_err(Q(:,1:j-1));
+        if do_orth_err
+            ortherr(k) = compute_orth_err(Q);
         end
-                       
-        j = j+1;
     end
-    
-    T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
-    T = [T; zeros(1,j-2) beta(j-1)];
-    Q = Q(:,1:j-1);
-    rnorm = rnorm(1:j-1,:);
-    ortherr = ortherr(1:j-1);
+      
+    % Fix output
+    T = T(1:s*(k-1)+1,1:s*(k-1));
+    Q = Q(:,1:s*(k-1));
+    rnorm = rnorm(1:(k-1),:);
+    ortherr = ortherr(1:(k-1));
+
 end
    
 function [Q,T,rnorm,ortherr] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis, do_ritz_norm, do_orth_err)

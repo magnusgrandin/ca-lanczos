@@ -20,8 +20,12 @@ function [X,R] = project(Q,X)
     numBlocks = length(Q);
     R = cell(1,numBlocks);
     for i = 1:numBlocks
-        R{i} = Q{i}'*X;
-        X = X - Q{i}*R{i};
+        if ~isempty(Q{i})
+            R{i} = Q{i}'*X;
+            X = X - Q{i}*R{i};
+        else
+            R{i} = [];
+        end
     end
 end
  
