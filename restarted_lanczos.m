@@ -1,10 +1,5 @@
-function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth)
+function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)
 
-    %eps_norm_A = eps*normest(A);
-    %tol = eps_norm_A;
-    tol = 1.0e-10;
-    tol = tol*normest(A);
-    
     restart_strategy = 'largest'; % 'largest','smallest','closest_conv','random'
     
     global g_lanczos_do_compute_ritz_rnorm;
@@ -23,6 +18,11 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
             return;
         end
     end
+    if nargin < 6
+        tol = 1.0e-06;
+    end
+    tol = tol*normest(A);
+
 
     % Check required output arguments
     g_lanczos_do_compute_ritz_rnorm = false;
@@ -102,7 +102,7 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
         
         if strcmpi(restart_strategy,'largest')
             % Generate new starting vector from the largest non-converged basis vector.
-            l = k+1;
+            l = min(k+1,iters);
             for j = k+1:iters
                 if Dp(j,j) > Dp(l,l)
                     l = j;
@@ -112,7 +112,7 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
             q = Q_new*Vp(:,l);  
         elseif strcmpi(restart_strategy,'smallest')
             % Generate new starting vector from the largest non-converged basis vector.
-            l = k+1;
+            l = min(k+1,iters);
             for j = k+1:iters
                 if Dp(j,j) < Dp(l,l)
                     l = j;
@@ -124,7 +124,7 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
             % Generate new starting vector from the non-converged basis vector that is 
             % closest to convergence
             min_norm = inf;
-            ix = k+1;
+            ix = min(k+1,iters);
             for i = k+2:iters
                 if ritz_norms(i) < min_norm
                     min_norm = ritz_norms(i);
@@ -134,7 +134,7 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
             q = Q_new*Vp(:,ix);
         elseif strcmpi(restart_strategy,'random')
             % Generate new starting vector from a random choice of the non-converged ones.
-            ix = (k+1) + round(rand(1)*(iters-k-1));
+            ix = min((k+1) + round(rand(1)*(iters-k-1)), iters);
             q = Q_new*Vp(:,ix);
         end
         
@@ -153,9 +153,15 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
                
         % Update the count of converged eigenvalues
         nconv = nconv+k;
-
-        % Check if we should continue iterations
-        restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:iters,k+1:iters)), n_wanted_eigs);
+        
+        if nconv == max_lanczos;
+            % We have reached max number of Lanczos vectors. No further restarts.
+            restart = false;
+        else
+            % Check if we should continue iterations
+            restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:iters,k+1:iters)), n_wanted_eigs);
+        end
+        
         if ~restart
             sort_eigs = sort(conv_eigs,'descend');
             final_eigs = sort_eigs(1:n_wanted_eigs);
