@@ -1,10 +1,8 @@
+% TODO (110530): Remove spurious/repeated eigenvalues in local orth. 
+
 function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)
 
-    restart_strategy = 'largest'; % 'largest','smallest','closest_conv','random'
-    
-    global g_lanczos_do_compute_ritz_rnorm;
-    global g_lanczos_do_compute_orth_err;
-    
+    % Check input arguments
     if nargin < 5
         orth = 'local';
     else
@@ -25,15 +23,15 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
 
 
     % Check required output arguments
-    g_lanczos_do_compute_ritz_rnorm = false;
-    g_lanczos_do_compute_orth_err = false;
+    do_ritz_norm = false;
     if nargout >= 3
-        g_lanczos_do_compute_ritz_rnorm = true;
+        do_ritz_norm = true;
     end
-    if nargout >= 4 
-        g_lanczos_do_compute_orth_err = true;
+    do_orth_err = false;
+    if nargout >= 4
+        do_orth_err = true;
     end
-
+    
     if strcmpi(orth,'local')
         disp('Local orthogonalization');
     elseif strcmpi(orth,'full')
@@ -43,6 +41,8 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
     elseif strcmpi(orth,'selective')
         disp('Selective orthogonalization');
     end
+
+    restart_strategy = 'largest'; % 'largest','smallest','closest_conv','random'
 
     % Vector length
     n = length(r);
@@ -64,13 +64,13 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
         Q_conv = Q(:,1:nconv);
                
         if strcmpi(orth,'local')
-            [Q_new,T,ritz_rnorm,orth_err] = lanczos_basic(A, Q_conv, q, iters);
+            [Q_new,T,ritz_rnorm,orth_err] = lanczos_basic(A, Q_conv, q, iters, 'local', do_ritz_norm, do_orth_err);
         elseif strcmpi(orth,'full')
-            [Q_new,T,ritz_rnorm,orth_err] = lanczos_basic(A, Q_conv, q, iters, 'fro');
+            [Q_new,T,ritz_rnorm,orth_err] = lanczos_basic(A, Q_conv, q, iters, 'fro', do_ritz_norm, do_orth_err);
         elseif strcmpi(orth,'periodic')
-            [Q_new,T,ritz_rnorm,orth_err] = lanczos_periodic(A, Q_conv, q, iters);
+            [Q_new,T,ritz_rnorm,orth_err] = lanczos_periodic(A, Q_conv, q, iters, do_ritz_norm, do_orth_err);
         elseif strcmpi(orth,'selective')
-            [Q_new,T,ritz_rnorm,orth_err] = lanczos_selective(A, Q_conv, q, iters);
+            [Q_new,T,ritz_rnorm,orth_err] = lanczos_selective(A, Q_conv, q, iters, do_ritz_norm, do_orth_err);
         else
             % Do nothing
         end
@@ -202,10 +202,7 @@ function [orth_err] = compute_orth_err(Q)
     orth_err = norm(eye(size(Q,2))-Q'*Q,'fro');
 end
 
-function [Q,T,rnorm,ortherr] = lanczos_basic(A,Q_conv,q,maxiter,orth)
-
-    global g_lanczos_do_compute_ritz_rnorm;
-    global g_lanczos_do_compute_orth_err;
+function [Q,T,rnorm,ortherr] = lanczos_basic(A,Q_conv,q,maxiter,orth,do_ritz_norm,do_orth_err)
 
     if nargin < 5
         orth = 'local';
@@ -243,14 +240,14 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A,Q_conv,q,maxiter,orth)
         end   
         
         % Compute the ritz-norm, if it is required
-        if g_lanczos_do_compute_ritz_rnorm && j > 2
+        if do_ritz_norm && j > 2
             T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
             [Vp,Dp] = eig(T);
             rnorm(j,:) = compute_ritz_rnorm(A,Q(:,1:j-1),Vp,Dp);
         end
         
         % Compute the orthogonalization error, if it is required
-        if g_lanczos_do_compute_orth_err && j > 2
+        if do_orth_err && j > 2
             ortherr(j) = compute_orth_err(Q(:,1:j-1));
         end
                        
@@ -264,10 +261,7 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A,Q_conv,q,maxiter,orth)
     ortherr = ortherr(1:j-1);
 end
 
-function [Q,T,rnorm,ortherr] = lanczos_selective(A,Q_conv,q,maxiter)
-
-    global g_lanczos_do_compute_ritz_rnorm;
-    global g_lanczos_do_compute_orth_err;
+function [Q,T,rnorm,ortherr] = lanczos_selective(A,Q_conv,q,maxiter,do_ritz_norm,do_orth_err)
     
     n = length(q);
     Q = zeros(n,maxiter);
@@ -320,14 +314,14 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A,Q_conv,q,maxiter)
         end
      
         % Compute the ritz-norm, if it is required
-        if g_lanczos_do_compute_ritz_rnorm && j > 2
+        if do_ritz_norm && j > 2
             T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
             [Vp,Dp] = eig(T);
             rnorm(j,:) = compute_ritz_rnorm(A,Q(:,1:j-1),Vp,Dp);
         end
         
         % Compute the orthogonalization error, if it is required
-        if g_lanczos_do_compute_orth_err && j > 2
+        if do_orth_err && j > 2
             ortherr(j) = compute_orth_err(Q(:,1:j-1));
         end
                        
@@ -341,10 +335,7 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A,Q_conv,q,maxiter)
     ortherr = ortherr(1:j-1);
 end
    
-function [Q,T,rnorm,ortherr] = lanczos_periodic(A,Q_conv,q,maxiter)
-
-    global g_lanczos_do_compute_ritz_rnorm;
-    global g_lanczos_do_compute_orth_err;
+function [Q,T,rnorm,ortherr] = lanczos_periodic(A,Q_conv,q,maxiter,do_ritz_norm,do_orth_err)
 
     n = length(q);
     Q = zeros(n,maxiter);
@@ -372,14 +363,14 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A,Q_conv,q,maxiter)
         Q(:,j+1) = project({Q_conv},Q(:,j+1));
 
         % Compute the ritz-norm, if it is required
-        if g_lanczos_do_compute_ritz_rnorm && j > 2
+        if do_ritz_norm && j > 2
             T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
             [Vp,Dp] = eig(T);
             rnorm(j,:) = compute_ritz_rnorm(A,Q(:,1:j-1),Vp,Dp);
         end
         
         % Compute the orthogonalization error, if it is required
-        if g_lanczos_do_compute_orth_err && j > 2
+        if do_orth_err && j > 2
             ortherr(j) = compute_orth_err(Q(:,1:j-1));
         end
                        
