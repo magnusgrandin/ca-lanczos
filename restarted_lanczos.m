@@ -2,10 +2,10 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
 
     %eps_norm_A = eps*normest(A);
     %tol = eps_norm_A;
-    tol = 1.0e-6;
+    tol = 1.0e-10;
     tol = tol*normest(A);
     
-    restart_strategy = 'closest_conv'; % 'largest','smallest','closest_conv','random'
+    restart_strategy = 'largest'; % 'largest','smallest','closest_conv','random'
     
     global g_lanczos_do_compute_ritz_rnorm;
     global g_lanczos_do_compute_orth_err;
@@ -59,7 +59,6 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
     while(restart)
                
         % Get the number of iterations to do next.
-        % TODO: Make this a multiple of s.
         iters = max_lanczos - nconv;
         
         Q_conv = Q(:,1:nconv);
@@ -360,21 +359,11 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A,Q_conv,q,maxiter)
             r=r-beta(j-1)*Q(:,j-1);
         end
         alpha(j) = r'*Q(:,j);
-        if(isnan(alpha(j)))
-            disp('Error: alpha is NaN');
-        end
         r = r - alpha(j)*Q(:,j);
         beta(j) = sqrt(r'*r);
-        if(beta(j) > 1.0e30)
-            disp('Error: beta is large');
-        end
-        if(isinf(beta(j)))
-            disp('Error: beta is INF');
-        end
-        if(isnan(beta(j)))
-            disp('Error: beta is NaN');
-        end
         Q(:,j+1) = r/beta(j);
+
+        Q(:,j+1) = project({Q_conv},Q(:,j+1));
 
         % Compute the ritz-norm, if it is required
         if g_lanczos_do_compute_ritz_rnorm && j > 2
@@ -396,8 +385,6 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A,Q_conv,q,maxiter)
             omega = reset_omega(omega, j, norm_A);
         end
         
-        Q(:,j+1) = project({Q_conv},Q(:,j+1));
-
         j = j+1;
     end
     
