@@ -1,4 +1,4 @@
-function [conv_eigs,Q_conv,conv_rnorms] = restarted_ca_lanczos(A, r, max_lanczos, s, n_wanted_eigs, basis, orth, tol)
+function [conv_eigs,Q_conv,conv_rnorms,max_orth_err] = restarted_ca_lanczos(A, r, max_lanczos, s, n_wanted_eigs, basis, orth, tol)
 
     % Check input arguments
     if nargin < 4
@@ -50,6 +50,7 @@ function [conv_eigs,Q_conv,conv_rnorms] = restarted_ca_lanczos(A, r, max_lanczos
     Q_conv = [];
     conv_eigs = [];
     conv_rnorms = [];
+    max_orth_err = 0;
     
     num_restarts = 0;
     restart = true;
@@ -73,6 +74,15 @@ function [conv_eigs,Q_conv,conv_rnorms] = restarted_ca_lanczos(A, r, max_lanczos
             % Do nothing
         end
  
+        % Update the maximum orthogonalization error
+        if nargout >= 4
+            Q_ = [Q_conv Q_new];
+            orth_err = norm(eye(size(Q_,2))-Q_'*Q_,'fro');
+            if orth_err > max_orth_err
+                max_orth_err = orth_err;
+            end
+        end
+
         % Compute residual norm estimates of all computed ritz-pairs.
         ritz_norms = zeros(s*iters,1);
         [Vp,Dp] = eig(T(1:s*iters,1:s*iters));
@@ -81,7 +91,7 @@ function [conv_eigs,Q_conv,conv_rnorms] = restarted_ca_lanczos(A, r, max_lanczos
             y = Vp(:,i);
             ritz_norms(i) = beta*abs(y(s*iters));
         end
-        
+               
         % Rearrange the eigenvalues such that the converged ones are first.
         k = 0;
         for i = 1:s*iters

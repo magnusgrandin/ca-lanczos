@@ -1,6 +1,6 @@
 % TODO (110530): Remove spurious/repeated eigenvalues in local orth. 
 
-function [conv_eigs,Q_conv,conv_rnorms] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)
+function [conv_eigs,Q_conv,conv_rnorms,max_orth_err] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)
 
     % Check input arguments
     if nargin < 5
@@ -43,6 +43,7 @@ function [conv_eigs,Q_conv,conv_rnorms] = restarted_lanczos(A, r, max_lanczos, n
     Q_conv = [];
     conv_eigs = [];
     conv_rnorms = [];
+    max_orth_err = 0;
     
     num_restarts = 0;
     restart = true;
@@ -66,6 +67,16 @@ function [conv_eigs,Q_conv,conv_rnorms] = restarted_lanczos(A, r, max_lanczos, n
             % Do nothing
         end
  
+        % Update the maximum orthogonalization error
+        if nargout >= 4
+            Q_ = [Q_conv Q_new];
+            %Q_ = Q_new;
+            orth_err = norm(eye(size(Q_,2))-Q_'*Q_,'fro')
+            if orth_err > max_orth_err
+                max_orth_err = orth_err;
+            end
+        end
+
         % Compute residual norm estimates of all computed ritz-pairs.
         ritz_norms = zeros(iters,1);
         [Vp,Dp] = eig(T(1:iters,1:iters));
@@ -99,22 +110,14 @@ function [conv_eigs,Q_conv,conv_rnorms] = restarted_lanczos(A, r, max_lanczos, n
             conv_rnorms = [conv_rnorms; ritz_norms(i)];
         end
         
-        if strcmpi(orth,'local')
-            q = projectAndNormalize({Q(:,1:nconv+k)},q,false);
-        end
-               
+        q = projectAndNormalize({Q(:,1:nconv+k)},q);
+        
         % Update the count of converged eigenvalues
         nconv = nconv+k;
   
         Q_conv = Q(:,1:nconv);
 
-        if nconv == max_lanczos;
-            % We have reached max number of Lanczos vectors. No further restarts.
-            restart = false;
-        else
-            % Check if we should continue iterations
-            restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:iters,k+1:iters)), n_wanted_eigs);
-        end
+        restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:iters,k+1:iters)), n_wanted_eigs);
         
         if ~restart
             [sort_eigs,ixs] = sort(conv_eigs,'descend');
@@ -172,12 +175,17 @@ function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
 end
 
 function restart = check_wanted_eigs(conv_eigs, eigs, num_wanted_eigs)
-    max_eig = max(eigs);
-    largest_conv_eigs = find(conv_eigs > max_eig);
-    if length(largest_conv_eigs) >= num_wanted_eigs
-        restart = false;
-    else
+    if isempty(eigs)
+        % Quick exit, no new eigs
         restart = true;
+    else
+        max_eig = max(eigs);
+        largest_conv_eigs = find(conv_eigs > max_eig);
+        if length(largest_conv_eigs) >= num_wanted_eigs
+            restart = false;
+        else
+            restart = true;
+        end
     end
 end
 
@@ -216,11 +224,10 @@ function [Q,T] = lanczos_basic(A,Q_conv,q,maxiter,orth)
         if strcmpi(orth,'fro') == 1
             % Orthogonalize against the locked vectors and all previously
             % computed vectors in this Lanczos instance.
-            Q(:,j+1) = orthogonalize(Q_conv,Q(:,j+1));
-            Q(:,j+1) = orthogonalize(Q(:,1:j),Q(:,j+1));
+            Q(:,j+1) = projectAndNormalize({Q(:,1:j),Q_conv},Q(:,j+1));
         else
             % Only orthogonlize against the locked vectors.
-            Q(:,j+1) = orthogonalize(Q_conv,Q(:,j+1));
+            Q(:,j+1) = projectAndNormalize({Q_conv},Q(:,j+1));
         end   
         
         j = j+1;
@@ -251,13 +258,10 @@ function [Q,T] = lanczos_selective(A,Q_conv,q,maxiter)
         if j > 1
             r=r-beta(j-1)*Q(:,j-1);
         end
-        alpha(j) = r'*Q(:,j);
-        r = r - alpha(j)*Q(:,j);
+        [r,R_] = project({Q(:,j),Q_conv,QR(:,1:nritz)},r);
+        alpha(j) = R_{1};
         beta(j) = sqrt(r'*r);
-        Q(:,j+1) = r/beta(j);
-     
-        % Orthogonalize against the locked basis vectors
-        Q(:,j+1) = orthogonalize(Q_conv,Q(:,j+1));
+        Q(:,j+1) = r/beta(j);    
 
         T = diag(alpha(1:j)) + diag(beta(1:j-1),1) + diag(beta(1:j-1),-1);
         [Vp,Dp] = eig(T);
@@ -276,9 +280,6 @@ function [Q,T] = lanczos_selective(A,Q_conv,q,maxiter)
                     QR(:,nritz) = y;
                 end
             end
-        end       
-        if nritz > 0
-            Q(:,j+1) = orthogonalize(QR(:,1:nritz),Q(:,j+1));
         end
      
         j = j+1;
@@ -307,18 +308,17 @@ function [Q,T] = lanczos_periodic(A,Q_conv,q,maxiter)
         if j > 1
             r=r-beta(j-1)*Q(:,j-1);
         end
-        alpha(j) = r'*Q(:,j);
-        r = r - alpha(j)*Q(:,j);
+        [r,R_] = project({Q(:,j),Q_conv},r);
+        alpha(j) = R_{1};
         beta(j) = sqrt(r'*r);
         Q(:,j+1) = r/beta(j);
 
-        Q(:,j+1) = project({Q_conv},Q(:,j+1));
-
+        
         % Estimate orthogonalization error, reorthogonalize if necessary
         omega = update_omega(omega, j, alpha, beta, norm_A);
         err = max(max(abs(omega - eye(size(omega)))));
         if err >= norm_A*sqrt(eps)
-            Q(:,j+1) = project({Q(:,1:j)},Q(:,j+1));
+            Q(:,j+1) = projectAndNormalize({Q(:,1:j)},Q(:,j+1));
             omega = reset_omega(omega, j, norm_A);
         end
         
