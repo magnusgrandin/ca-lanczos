@@ -1,4 +1,4 @@
-function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_ca_lanczos(A, r, max_lanczos, s, n_wanted_eigs, basis, orth, tol)
+function [conv_eigs,Q_conv,conv_rnorms] = restarted_ca_lanczos(A, r, max_lanczos, s, n_wanted_eigs, basis, orth, tol)
 
     % Check input arguments
     if nargin < 4
@@ -28,16 +28,6 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_ca_lanczos(A, r, max_lan
     end
     tol = tol*normest(A);
 
-    % Check required output arguments
-    do_ritz_norm = false;
-    if nargout >= 3
-        do_ritz_norm = true;
-    end
-    do_orth_err = false;
-    if nargout >= 4
-        do_orth_err = true;
-    end
-
     if strcmpi(orth,'local')
         disp('Local orthogonalization');
     elseif strcmpi(orth,'full')
@@ -57,6 +47,7 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_ca_lanczos(A, r, max_lan
     q = r/norm(r);
 
     Q = zeros(n,max_lanczos+s);
+    Q_conv = [];
     conv_eigs = [];
     conv_rnorms = [];
     
@@ -70,16 +61,14 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_ca_lanczos(A, r, max_lan
         % Get the number of iterations to do next.
         iters = ceil((max_lanczos-nconv)/s);
         
-        Q_conv = Q(:,1:nconv);
-               
         if strcmpi(orth,'local')
-            [Q_new,T,ritz_rnorm,orth_err] = lanczos_basic(A, Q_conv, q, iters, s, basis, 'local', do_ritz_norm, do_orth_err);
+            [Q_new,T] = lanczos_basic(A, Q_conv, q, iters, s, basis, 'local');
         elseif strcmpi(orth,'full')
-            [Q_new,T,ritz_rnorm,orth_err] = lanczos_basic(A, Q_conv, q, iters, s, basis, 'fro', do_ritz_norm, do_orth_err);
+            [Q_new,T] = lanczos_basic(A, Q_conv, q, iters, s, basis, 'fro');
         elseif strcmpi(orth,'periodic')
-            [Q_new,T,ritz_rnorm,orth_err] = lanczos_periodic(A, Q_conv, q, iters, s, basis, do_ritz_norm, do_orth_err);
+            [Q_new,T] = lanczos_periodic(A, Q_conv, q, iters, s, basis);
         elseif strcmpi(orth,'selective')
-            [Q_new,T,ritz_rnorm,orth_err] = lanczos_selective(A, Q_conv, q, iters, s, basis, do_ritz_norm, do_orth_err);
+            [Q_new,T] = lanczos_selective(A, Q_conv, q, iters, s, basis);
         else
             % Do nothing
         end
@@ -109,68 +98,76 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_ca_lanczos(A, r, max_lan
             end
         end
         
-        if strcmpi(restart_strategy,'largest')
-            % Generate new starting vector from the largest non-converged basis vector.
-            l = k+1;
-            for j = k+1:s*iters
-                if Dp(j,j) > Dp(l,l)
-                    l = j;
-                end
-            end
-            Dp(l,l)
-            q = Q_new*Vp(:,l);  
-        elseif strcmpi(restart_strategy,'smallest')
-            % Generate new starting vector from the largest non-converged basis vector.
-            l = k+1;
-            for j = k+1:s*iters
-                if Dp(j,j) < Dp(l,l)
-                    l = j;
-                end
-            end
-            Dp(l,l)
-            q = Q_new*Vp(:,l);             
-        elseif strcmpi(restart_strategy,'closest_conv')
-            % Generate new starting vector from the non-converged basis vector that is 
-            % closest to convergence
-            min_norm = inf;
-            ix = k+1;
-            for i = k+2:s*iters
-                if ritz_norms(i) < min_norm
-                    min_norm = ritz_norms(i);
-                    ix = i;
-                end
-            end
-            q = Q_new*Vp(:,ix);
-        elseif strcmpi(restart_strategy,'random')
-            % Generate new starting vector from a random choice of the non-converged ones.
-            ix = (k+1) + round(rand(1)*(s*iters-k-1));
-            q = Q_new*Vp(:,ix);
-        end
-        
-        % Normalize the new starting vector
-        q = q/norm(q);
-                
+        q = generateStartVector(diag(Dp),Vp,Q_new,ritz_norms,k,restart_strategy);
+
         for i = 1:k
             Q(:,i+nconv) = Q_new*Vp(:,i);
             conv_eigs = [conv_eigs; Dp(i,i)];
             conv_rnorms = [conv_rnorms; ritz_norms(i)];
         end
         
-        %if strcmpi(orth,'local')
-            q = projectAndNormalize({Q(:,1:nconv+k)},q,false);
-        %end
+        q = projectAndNormalize({Q(:,1:nconv+k)},q,false);
                
         % Update the count of converged eigenvalues
         nconv = nconv+k;
 
+        Q_conv = Q(:,1:nconv);
+
         % Check if we should continue iterations
         restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:s*iters,k+1:s*iters)), n_wanted_eigs);
         if ~restart
-            sort_eigs = sort(conv_eigs,'descend');
-            final_eigs = sort_eigs(1:n_wanted_eigs);
+            [sort_eigs,ixs] = sort(conv_eigs,'descend');
+            sort_rnorms = conv_rnorms(ixs);
+            conv_eigs = sort_eigs(1:n_wanted_eigs);
+            conv_rnorms = sort_rnorms(1:n_wanted_eigs);
             disp(['Number of restarts: ' num2str(num_restarts)]);
         end
     end
+end
+
+function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
+    if nargin < 4
+        strategy = 'largest';
+    end
+    m = length(eig_vals);
+    if strcmpi(strategy,'largest')
+        % Generate new starting vector from the largest non-converged basis vector.
+        l = k+1;
+        for j = k+1:m
+            if eig_vals(j) > eig_vals(l)
+                l = j;
+            end
+        end
+        q = Q*eig_vecs(:,l);
+    elseif strcmpi(strategy,'smallest')
+        % Generate new starting vector from the largest non-converged basis vector.
+        l = k+1;
+        for j = k+1:m
+            if eig_vals(j) < eig_vals(l,l)
+                l = j;
+            end
+        end
+        q = Q*eig_vecs(:,l);
+    elseif strcmpi(strategy,'closest_conv')
+        % Generate new starting vector from the non-converged basis vector that is
+        % closest to convergence
+        min_norm = inf;
+        ix = k+1;
+        for i = k+2:m
+            if ritz_norms(i) < min_norm
+                min_norm = ritz_norms(i);
+                ix = i;
+            end
+        end
+        q = Q*eig_vecs(:,ix);
+    elseif strcmpi(strategy,'random')
+        % Generate new starting vector from a random choice of the non-converged ones.
+        ix = (k+1) + round(rand(1)*(m-k-1));
+        q = Q*eig_vecs(:,ix);
+    end
+    
+    % Normalize the new vector
+    q = q/norm(q);
 end
 
 function restart = check_wanted_eigs(conv_eigs, eigs, num_wanted_eigs)
@@ -186,22 +183,6 @@ function restart = check_wanted_eigs(conv_eigs, eigs, num_wanted_eigs)
             restart = true;
         end
     end
-end
-
-function [ritz_rnorm] = compute_ritz_rnorm(A,Q,Vp,Dp)
-    ritz_rnorm = [];
-    % Residual norm for smallest eigenpair
-    [d_s,i_s] = min(diag(Dp));
-    x_s = Q*Vp(:,i_s);
-    ritz_rnorm(1) = norm(A*x_s-d_s*x_s)/norm(d_s*x_s);  
-    % Residual norm for largest eigenpair
-    [d_l,i_l] = max(diag(Dp));
-    x_l = Q*Vp(:,i_l);
-    ritz_rnorm(2) = norm(A*x_l-d_l*x_l)/norm(d_l*x_l);
-end
-
-function [orth_err] = compute_orth_err(Q)      
-    orth_err = norm(eye(size(Q,2))-Q'*Q,'fro');
 end
 
 % Compute matrix powers
@@ -222,7 +203,7 @@ function vec = eyeshvec(len)
     vec=circshift(vec,len-1);
 end
  
-function [Q,T,rnorm,ortherr] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, orth, do_ritz_norm, do_orth_err)
+function [Q,T] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, orth)
 
     if nargin < 7
         orth = 'local';
@@ -233,8 +214,6 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, or
     Q(:,1) = q;
     b = zeros(maxiter+1,1);
     T = [];
-    rnorm = zeros(maxiter,2);
-    ortherr = zeros(maxiter,1);
     Bk = [];
     
     % Fix change-of-basis matrix
@@ -310,27 +289,14 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, or
             T = [T11, T12; T21, T22; T31, T32];
  
         end
-        
-        % Compute the ritz-norm, if it is required
-        if do_ritz_norm
-            [Vp,Dp] = eig(T(1:s*k,1:s*k));
-            rnorm(k,:) = compute_ritz_rnorm(A,Q(:,1:s*k),Vp,Dp);
-        end
-        
-        % Compute the orthogonalization error, if it is required
-        if do_orth_err
-            ortherr(k) = compute_orth_err(Q);
-        end
     end
     
     % Fix output
     T = T(1:s*(k-1)+1,1:s*(k-1));
     Q = Q(:,1:s*(k-1));
-    rnorm = rnorm(1:(k-1),:);
-    ortherr = ortherr(1:(k-1));
 end
 
-function [Q,T,rnorm,ortherr] = lanczos_selective(A, Q_conv, q, maxiter, s, basis, do_ritz_norm, do_orth_err)
+function [Q,T] = lanczos_selective(A, Q_conv, q, maxiter, s, basis)
     
     n = length(q);
     Q = zeros(n,maxiter*s);
@@ -338,8 +304,6 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A, Q_conv, q, maxiter, s, basis
     b = zeros(maxiter+1,1);
     T = [];
     Bk = [];
-    rnorm = zeros(maxiter,2);
-    ortherr = zeros(maxiter,1);
     norm_sqrt_eps = normest(A)*sqrt(eps);
     nritz = 0;
     
@@ -433,28 +397,15 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A, Q_conv, q, maxiter, s, basis
         end
 
         disp(['nritz=' num2str(nritz)])
-       
-        % Compute the ritz-norm, if it is required
-        if do_ritz_norm
-            %[Vp,Dp] = eig(T(1:s*k,1:s*k));
-            rnorm(k,:) = compute_ritz_rnorm(A,Q(:,1:s*k),Vp,Dp);
-        end
-        
-        % Compute the orthogonalization error, if it is required
-        if do_orth_err
-            ortherr(k) = compute_orth_err(Q);
-        end
     end
       
     % Fix output
     T = T(1:s*(k-1)+1,1:s*(k-1));
     Q = Q(:,1:s*(k-1));
-    rnorm = rnorm(1:(k-1),:);
-    ortherr = ortherr(1:(k-1));
 
 end
    
-function [Q,T,rnorm,ortherr] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis, do_ritz_norm, do_orth_err)
+function [Q,T] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis)
 
     n = length(q);
     Q = zeros(n,maxiter*s);
@@ -462,8 +413,6 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis,
     b = zeros(maxiter+1,1);
     T = [];
     Bk = [];
-    rnorm = zeros(maxiter,2);
-    ortherr = zeros(maxiter,1);
     omega = [];
     norm_A = normest(A);
 
@@ -536,17 +485,6 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis,
             T = [T11, T12; T21, T22; T31, T32];
         end
         
-        % Compute the ritz-norm, if it is required
-        if do_ritz_norm
-            [Vp,Dp] = eig(T(1:s*k,1:s*k));
-            rnorm(k,:) = compute_ritz_rnorm(A,Q(:,1:s*k),Vp,Dp);
-        end
-        
-        % Compute the orthogonalization error, if it is required
-        if do_orth_err
-            ortherr(k) = compute_orth_err(Q);
-        end
-        
         % Estimate orthogonalization error, reorthogonalize if necessary
         alpha = diag(T,0);
         beta  = diag(T,-1);
@@ -561,8 +499,6 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis,
     % Fix output
     T = T(1:s*(k-1)+1,1:s*(k-1));
     Q = Q(:,1:s*(k-1));
-    rnorm = rnorm(1:(k-1),:);
-    ortherr = ortherr(1:(k-1));
 end
 
 function omega = update_omega(omega_in, alpha, beta, anorm, s)
