@@ -54,10 +54,13 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
     conv_eigs = [];
     conv_rnorms = [];
     
+    num_restarts = 0;
     restart = true;
     nconv = 0;
     while(restart)
                
+        num_restarts = num_restarts + 1;
+        
         % Get the number of iterations to do next.
         iters = max_lanczos - nconv;
         
@@ -165,6 +168,7 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_lanczos(A, r, max_lanczo
         if ~restart
             sort_eigs = sort(conv_eigs,'descend');
             final_eigs = sort_eigs(1:n_wanted_eigs);
+            disp(['Number of restarts: ' num2str(num_restarts)]);
         end
     end
 end

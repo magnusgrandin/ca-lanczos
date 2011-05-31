@@ -60,10 +60,13 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_ca_lanczos(A, r, max_lan
     conv_eigs = [];
     conv_rnorms = [];
     
+    num_restarts = 0;
     restart = true;
     nconv = 0;
     while(restart)
                
+        num_restarts = num_restarts+1;
+        
         % Get the number of iterations to do next.
         iters = ceil((max_lanczos-nconv)/s);
         
@@ -165,6 +168,7 @@ function [Q,final_eigs,ritz_rnorm,orth_err] = restarted_ca_lanczos(A, r, max_lan
         if ~restart
             sort_eigs = sort(conv_eigs,'descend');
             final_eigs = sort_eigs(1:n_wanted_eigs);
+            disp(['Number of restarts: ' num2str(num_restarts)]);
         end
     end
 end
@@ -549,7 +553,7 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis,
         omega = update_omega(omega,alpha,beta,norm_A, s);
         err = max(max(abs(omega - eye(size(omega)))));
         if err >= norm_A*sqrt(eps)
-            Q(:,(k-1)*s+1:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s)},Q(:,(k-1)*s+1:k*s+1),true);
+            Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s+1)},Q(:,(k-1)*s+2:k*s+1),true);
             omega = reset_omega(omega, norm_A, s);
         end
     end
