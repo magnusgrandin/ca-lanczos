@@ -2,8 +2,17 @@
 
 function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)
 
+    max_restarts = 100;
+
     % Check input arguments
-    if nargin < 5
+    if nargin < 3
+        disp('Usage:');
+        disp('  [E,{V},{r},{o}] = restarted_ca_lanczos(A, r, max_iter, {n_wanted_eigs}, {s}, {basis}, {orth}, {tol})')
+    end
+    if nargin < 4 || isempty(n_wanted_eigs)
+        n_wanted_eigs = 10;
+    end
+    if nargin < 5 || isempty(orth)
         orth = 'local';
     else
         if isnumeric(orth)
@@ -16,7 +25,7 @@ function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_lanczos(A, r, max_l
             return;
         end
     end
-    if nargin < 6
+    if nargin < 6 || isempty(tol)
         tol = 1.0e-06;
     end
     tol = tol*normest(A);
@@ -48,7 +57,7 @@ function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_lanczos(A, r, max_l
     num_restarts = 0;
     restart = true;
     nconv = 0;
-    while(restart)
+    while(restart && num_restarts < max_restarts)
                
         num_restarts = num_restarts + 1;
         
@@ -106,7 +115,7 @@ function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_lanczos(A, r, max_l
             conv_rnorms = [conv_rnorms; ritz_norms(i)];
         end
         
-        q = projectAndNormalize({Q(:,1:nconv+k)},q);
+        q = projectAndNormalize({Q(:,1:nconv+k)},q,true);
         
         % Update the count of converged eigenvalues
         nconv = nconv+k;
@@ -114,14 +123,22 @@ function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_lanczos(A, r, max_l
         Q_conv = Q(:,1:nconv);
 
         restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:iters,k+1:iters)), n_wanted_eigs);
-        
-        if ~restart
-            [sort_eigs,ixs] = sort(conv_eigs,'descend');
-            sort_rnorms = conv_rnorms(ixs);
-            conv_eigs = sort_eigs(1:n_wanted_eigs);
-            conv_rnorms = sort_rnorms(1:n_wanted_eigs);
-            disp(['Number of restarts: ' num2str(num_restarts)]);
-        end
+    end
+    if ~restart
+        [sort_eigs,ixs] = sort(conv_eigs,'descend');
+        sort_rnorms = conv_rnorms(ixs);
+        conv_eigs = sort_eigs(1:n_wanted_eigs);
+        conv_rnorms = sort_rnorms(1:n_wanted_eigs);
+        Q_conv = Q_conv(:,ixs);
+        Q_conv = Q_conv(:,1:n_wanted_eigs);
+        disp(['Converged in ' num2str(num_restarts) ' restarts.']);
+        disp(['Max residual norm: ' num2str(max(conv_rnorms))]);
+    else       
+        disp(['Did not converge.']);
+        conv_eigs = [];
+        conv_rnorms = [];
+        Q_conv = [];
+        orth_err = [];
     end
 end
 
@@ -219,7 +236,7 @@ function [Q,T] = lanczos_basic(A,Q_conv,q,maxiter,orth)
         beta(j) = sqrt(r'*r);
         Q(:,j+1) = r/beta(j);
         if strcmpi(orth,'fro') == 1
-            Q(:,j+1) = projectAndNormalize({Q(:,1:j)},Q(:,j+1));
+            Q(:,j+1) = projectAndNormalize({Q(:,1:j),Q_conv},Q(:,j+1),true);
         end
         j = j+1;
     end
@@ -310,7 +327,7 @@ function [Q,T] = lanczos_periodic(A,Q_conv,q,maxiter)
         omega = update_omega(omega, j, alpha, beta, norm_A);
         err = max(max(abs(omega - eye(size(omega)))));
         if err >= norm_A*sqrt(eps)
-            Q(:,j+1) = projectAndNormalize({Q(:,1:j)},Q(:,j+1));
+            Q(:,j+1) = projectAndNormalize({Q(:,1:j)},Q(:,j+1),true);
             omega = reset_omega(omega, j, norm_A);
         end
         

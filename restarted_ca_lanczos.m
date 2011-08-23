@@ -1,16 +1,22 @@
 function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
 
+    max_restarts = 100;
+
     % Check input arguments
-    if nargin < 4
-        s = 6;
+    if nargin < 3
+        disp('Usage:');
+        disp('  [E,{V},{r},{o}] = restarted_ca_lanczos(A, r, max_iter, {n_wanted_eigs}, {s}, {basis}, {orth}, {tol})')
     end
-    if nargin < 5
+    if nargin < 4 || isempty(n_wanted_eigs)
         n_wanted_eigs = 10;
     end
-    if nargin < 6
+    if nargin < 5 || isempty(s)
+        s = 6;
+    end
+    if nargin < 6 || isempty(basis)
         basis = 'newton';
     end
-    if nargin < 7
+    if nargin < 7 || isempty(orth)
         orth = 'local';
     else
         if isnumeric(orth)
@@ -23,7 +29,7 @@ function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_ca_lanczos(A, r, ma
             return;
         end
     end
-    if nargin < 8
+    if nargin < 8 || isempty(tol)
         tol = 1.0e-06;
     end
     tol = tol*normest(A);
@@ -46,6 +52,19 @@ function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_ca_lanczos(A, r, ma
     % Normalize the initial vector.
     q = r/norm(r);
     
+    % Fix change-of-basis matrix
+    Bk = [];
+    if strcmpi(basis,'monomial')
+        I = eye(s+1);
+        Bk = I(:,2:s+1);        
+    elseif strcmpi(basis,'newton')
+        % Run standard Lanczos for 2s steps
+        T = lanczos(A,q,2*s,'full');
+        basis_eigs = eig(T);
+        basis_shifts = leja(basis_eigs,'nonmodified');
+        Bk = newton_basis_matrix(basis_shifts, s,1);
+    end
+
     Q = zeros(n,max_lanczos+s);
     Q_conv = [];
     conv_eigs = [];
@@ -55,21 +74,21 @@ function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_ca_lanczos(A, r, ma
     num_restarts = 0;
     restart = true;
     nconv = 0;
-    while(restart)
+    while(restart && num_restarts < max_restarts)
                
         num_restarts = num_restarts+1;
         
         % Get the number of iterations to do next.
-        iters = ceil((max_lanczos-nconv)/s);
+        iters = floor((max_lanczos-nconv)/s);
         
         if strcmpi(orth,'local')
-            [Q_new,T] = lanczos_basic(A, Q_conv, q, iters, s, basis, 'local');
+            [Q_new,T] = lanczos_basic(A, Q_conv, q, Bk, iters, s, basis, 'local');
         elseif strcmpi(orth,'full')
-            [Q_new,T] = lanczos_basic(A, Q_conv, q, iters, s, basis, 'fro');
+            [Q_new,T] = lanczos_basic(A, Q_conv, q, Bk, iters, s, basis, 'fro');
         elseif strcmpi(orth,'periodic')
-            [Q_new,T] = lanczos_periodic(A, Q_conv, q, iters, s, basis);
+            [Q_new,T] = lanczos_periodic(A, Q_conv, q, Bk, iters, s, basis);
         elseif strcmpi(orth,'selective')
-            [Q_new,T] = lanczos_selective(A, Q_conv, q, iters, s, basis);
+            [Q_new,T] = lanczos_selective(A, Q_conv, q, Bk, iters, s, basis);
         else
             % Do nothing
         end
@@ -113,7 +132,7 @@ function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_ca_lanczos(A, r, ma
             conv_rnorms = [conv_rnorms; ritz_norms(i)];
         end
         
-        q = projectAndNormalize({Q(:,1:nconv+k)},q,false);
+        q = projectAndNormalize({Q(:,1:nconv+k)},q,true);
                
         % Update the count of converged eigenvalues
         nconv = nconv+k;
@@ -122,13 +141,23 @@ function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_ca_lanczos(A, r, ma
 
         % Check if we should continue iterations
         restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:s*iters,k+1:s*iters)), n_wanted_eigs);
-        if ~restart
-            [sort_eigs,ixs] = sort(conv_eigs,'descend');
-            sort_rnorms = conv_rnorms(ixs);
-            conv_eigs = sort_eigs(1:n_wanted_eigs);
-            conv_rnorms = sort_rnorms(1:n_wanted_eigs);
-            disp(['Number of restarts: ' num2str(num_restarts)]);
-        end
+    end
+
+    if ~restart
+        [sort_eigs,ixs] = sort(conv_eigs,'descend');
+        sort_rnorms = conv_rnorms(ixs);
+        conv_eigs = sort_eigs(1:n_wanted_eigs);
+        conv_rnorms = sort_rnorms(1:n_wanted_eigs);
+        Q_conv = Q_conv(:,ixs);
+        Q_conv = Q_conv(:,1:n_wanted_eigs);
+        disp(['Converged in ' num2str(num_restarts) ' restarts.']);
+        disp(['Max residual norm: ' num2str(max(conv_rnorms))]);
+    else       
+        disp(['Did not converge.']);
+        conv_eigs = [];
+        conv_rnorms = [];
+        Q_conv = [];
+        orth_err = [];
     end
 end
 
@@ -210,7 +239,7 @@ function vec = eyeshvec(len)
     vec=circshift(vec,len-1);
 end
  
-function [Q,T] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, orth)
+function [Q,T] = lanczos_basic(A, Q_conv, q, Bk, maxiter, s, basis, orth)
 
     if nargin < 7
         orth = 'local';
@@ -221,19 +250,6 @@ function [Q,T] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, orth)
     Q(:,1) = q;
     b = zeros(maxiter+1,1);
     T = [];
-    Bk = [];
-    
-    % Fix change-of-basis matrix
-    if strcmpi(basis,'monomial')
-        I = eye(s+1);
-        Bk = I(:,2:s+1);        
-    elseif strcmpi(basis,'newton')
-        % Run standard Lanczos for 2s steps
-        T = lanczos(A,q,2*s,'full');
-        basis_eigs = eig(T);
-        basis_shifts = leja(basis_eigs,'nonmodified');
-        Bk = newton_basis_matrix(basis_shifts, s,1);
-    end
     
     k = 0;
     while k <= maxiter
@@ -250,7 +266,7 @@ function [Q,T] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, orth)
             % QR factorization
             [Q(:,1:s+1),Rk] = normalize(V(:,1:s+1));
             % Orthogonalize against already converged basis vectors
-            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),false);
+            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),true);
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta
@@ -258,13 +274,13 @@ function [Q,T] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, orth)
         else
             if strcmpi(orth,'local')
                 % Orthogonalize against previous block of basis vectors
-                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q_conv},V(:,2:s+1),false);
+                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q_conv},V(:,2:s+1),true);
                 Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
                 Rkk_s = Rk_{1};
                 Rk_s = Rk_{3};
             elseif strcmpi(orth,'fro')
                 % Orthogonality against all previous basis vectors
-                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q(:,1:(k-1)*s+1),Q_conv},V(:,2:s+1),false);
+                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q(:,1:(k-1)*s+1),Q_conv},V(:,2:s+1),true);
                 Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
                 Rkk_s = Rk_{1};
                 Rk_s = Rk_{4};
@@ -303,30 +319,17 @@ function [Q,T] = lanczos_basic(A, Q_conv, q, maxiter, s, basis, orth)
     Q = Q(:,1:s*(k-1));
 end
 
-function [Q,T] = lanczos_selective(A, Q_conv, q, maxiter, s, basis)
+function [Q,T] = lanczos_selective(A, Q_conv, q, Bk, maxiter, s, basis)
     
     n = length(q);
     Q = zeros(n,maxiter*s);
     QR = [];
     b = zeros(maxiter+1,1);
     T = [];
-    Bk = [];
     norm_sqrt_eps = normest(A)*sqrt(eps);
     nritz = 0;
     
     Q(:,1) = q;
-    
-    % Fix change-of-basis matrix
-    if strcmpi(basis,'monomial')
-        I = eye(s+1);
-        Bk = I(:,2:s+1);        
-    elseif strcmpi(basis,'newton')
-        % Run standard Lanczos for 2s steps
-        T = lanczos(A,q,2*s,'full');
-        basis_eigs = eig(T);
-        basis_shifts = leja(basis_eigs,'nonmodified');
-        Bk = newton_basis_matrix(basis_shifts, s,1);
-    end
     
     k = 0;
     while k <= maxiter
@@ -343,7 +346,7 @@ function [Q,T] = lanczos_selective(A, Q_conv, q, maxiter, s, basis)
             % QR factorization
             [Q(:,1:s+1),Rk] = normalize(V(:,1:s+1));
             % Orthogonalize against already converged basis vectors
-            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),false);
+            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),true);
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta
@@ -352,7 +355,7 @@ function [Q,T] = lanczos_selective(A, Q_conv, q, maxiter, s, basis)
         else
             % Orthogonalize against previous block of basis vectors and the
             % already converged ritz vectors
-            [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q_conv,QR(:,1:nritz)},V(:,2:s+1),false);
+            [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q_conv,QR(:,1:nritz)},V(:,2:s+1),true);
             Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
             Rkk_s = Rk_{1};
             Rk_s = Rk_{4};
@@ -412,31 +415,18 @@ function [Q,T] = lanczos_selective(A, Q_conv, q, maxiter, s, basis)
 
 end
    
-function [Q,T] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis)
+function [Q,T] = lanczos_periodic(A, Q_conv, q, Bk, maxiter, s, basis)
 
     n = length(q);
     Q = zeros(n,maxiter*s);
     QR = [];
     b = zeros(maxiter+1,1);
     T = [];
-    Bk = [];
     omega = [];
     norm_A = normest(A);
 
     Q(:,1) = q;
 
-    % Fix change-of-basis matrix
-    if strcmpi(basis,'monomial')
-        I = eye(s+1);
-        Bk = I(:,2:s+1);        
-    elseif strcmpi(basis,'newton')
-        % Run standard Lanczos for 2s steps
-        T = lanczos(A,q,2*s,'full');
-        basis_eigs = eig(T);
-        basis_shifts = leja(basis_eigs,'nonmodified');
-        Bk = newton_basis_matrix(basis_shifts, s,1);
-    end
-    
     k = 0;
     while k <= maxiter
 
@@ -452,7 +442,7 @@ function [Q,T] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis)
             % QR factorization
             [Q(:,1:s+1),Rk] = normalize(V(:,1:s+1));
             % Orthogonalize against already converged basis vectors
-            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),false);
+            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),true);
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta
@@ -461,7 +451,7 @@ function [Q,T] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis)
         else
             % Orthogonalize against previous block of basis vectors and
             % previously converged vectors.
-            [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q_conv},V(:,2:s+1),false);
+            [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q_conv},V(:,2:s+1),true);
             Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
             Rkk_s = Rk_{1};
             Rk_s = Rk_{3};
@@ -498,7 +488,7 @@ function [Q,T] = lanczos_periodic(A, Q_conv, q, maxiter, s, basis)
         omega = update_omega(omega,alpha,beta,norm_A, s);
         err = max(max(abs(omega - eye(size(omega)))));
         if err >= norm_A*sqrt(eps)
-            Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s+1)},Q(:,(k-1)*s+2:k*s+1),true);
+            Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s+1)},Q(:,(k-1)*s+2:k*s+1));
             omega = reset_omega(omega, norm_A, s);
         end
     end
