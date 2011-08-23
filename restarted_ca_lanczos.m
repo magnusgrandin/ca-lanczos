@@ -1,4 +1,4 @@
-function [conv_eigs,Q_conv,conv_rnorms,max_orth_err] = restarted_ca_lanczos(A, r, max_lanczos, s, n_wanted_eigs, basis, orth, tol)
+function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
 
     % Check input arguments
     if nargin < 4
@@ -45,12 +45,12 @@ function [conv_eigs,Q_conv,conv_rnorms,max_orth_err] = restarted_ca_lanczos(A, r
         
     % Normalize the initial vector.
     q = r/norm(r);
-
+    
     Q = zeros(n,max_lanczos+s);
     Q_conv = [];
     conv_eigs = [];
     conv_rnorms = [];
-    max_orth_err = 0;
+    orth_err = [];
     
     num_restarts = 0;
     restart = true;
@@ -77,10 +77,7 @@ function [conv_eigs,Q_conv,conv_rnorms,max_orth_err] = restarted_ca_lanczos(A, r
         % Update the maximum orthogonalization error
         if nargout >= 4
             Q_ = [Q_conv Q_new];
-            orth_err = norm(eye(size(Q_,2))-Q_'*Q_,'fro');
-            if orth_err > max_orth_err
-                max_orth_err = orth_err;
-            end
+            orth_err = [orth_err; norm(eye(size(Q_,2))-Q_'*Q_,'fro')];
         end
 
         % Compute residual norm estimates of all computed ritz-pairs.
@@ -150,10 +147,10 @@ function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
         end
         q = Q*eig_vecs(:,l);
     elseif strcmpi(strategy,'smallest')
-        % Generate new starting vector from the largest non-converged basis vector.
+        % Generate new starting vector from the smallest non-converged basis vector.
         l = k+1;
         for j = k+1:m
-            if eig_vals(j) < eig_vals(l,l)
+            if eig_vals(j) < eig_vals(l)
                 l = j;
             end
         end

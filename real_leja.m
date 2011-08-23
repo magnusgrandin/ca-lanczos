@@ -71,6 +71,8 @@ function [y,idx] = real_leja (x)
                 y(k+1) = real(y(k)) - i * abs(imag(y(k)));
               
                 k = k + 2;
+            else
+                disp('Error in real_leja, complex numbers.');
             end
         else
             k = k + 1;

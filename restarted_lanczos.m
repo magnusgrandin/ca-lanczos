@@ -1,6 +1,6 @@
 % TODO (110530): Remove spurious/repeated eigenvalues in local orth. 
 
-function [conv_eigs,Q_conv,conv_rnorms,max_orth_err] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)
+function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)
 
     % Check input arguments
     if nargin < 5
@@ -43,7 +43,7 @@ function [conv_eigs,Q_conv,conv_rnorms,max_orth_err] = restarted_lanczos(A, r, m
     Q_conv = [];
     conv_eigs = [];
     conv_rnorms = [];
-    max_orth_err = 0;
+    orth_err = [];
     
     num_restarts = 0;
     restart = true;
@@ -70,11 +70,7 @@ function [conv_eigs,Q_conv,conv_rnorms,max_orth_err] = restarted_lanczos(A, r, m
         % Update the maximum orthogonalization error
         if nargout >= 4
             Q_ = [Q_conv Q_new];
-            %Q_ = Q_new;
-            orth_err = norm(eye(size(Q_,2))-Q_'*Q_,'fro')
-            if orth_err > max_orth_err
-                max_orth_err = orth_err;
-            end
+            orth_err = [orth_err; norm(eye(size(Q_,2))-Q_'*Q_,'fro')];
         end
 
         % Compute residual norm estimates of all computed ritz-pairs.
@@ -216,20 +212,15 @@ function [Q,T] = lanczos_basic(A,Q_conv,q,maxiter,orth)
         if j > 1
             r=r-beta(j-1)*Q(:,j-1);
         end
-        alpha(j) = r'*Q(:,j);
-        r = r - alpha(j)*Q(:,j);
+%         alpha(j) = r'*Q(:,j);
+%         r = r - alpha(j)*Q(:,j);
+        [r,R_] = project({Q(:,j),Q_conv},r);
+        alpha(j) = R_{1};
         beta(j) = sqrt(r'*r);
         Q(:,j+1) = r/beta(j);
-        
         if strcmpi(orth,'fro') == 1
-            % Orthogonalize against the locked vectors and all previously
-            % computed vectors in this Lanczos instance.
-            Q(:,j+1) = projectAndNormalize({Q(:,1:j),Q_conv},Q(:,j+1));
-        else
-            % Only orthogonlize against the locked vectors.
-            Q(:,j+1) = projectAndNormalize({Q_conv},Q(:,j+1));
-        end   
-        
+            Q(:,j+1) = projectAndNormalize({Q(:,1:j)},Q(:,j+1));
+        end
         j = j+1;
     end
     
@@ -280,6 +271,7 @@ function [Q,T] = lanczos_selective(A,Q_conv,q,maxiter)
                     QR(:,nritz) = y;
                 end
             end
+            QR(:,1:nritz) = normalize(QR(:,1:nritz));
         end
      
         j = j+1;
