@@ -1,6 +1,6 @@
 % TODO (110530): Remove spurious/repeated eigenvalues in local orth. 
 
-function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)
+function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)
 
     max_restarts = 100;
 
@@ -231,7 +231,7 @@ function [Q,T] = lanczos_basic(A,Q_conv,q,maxiter,orth)
         end
 %         alpha(j) = r'*Q(:,j);
 %         r = r - alpha(j)*Q(:,j);
-        [r,R_] = project({Q(:,j),Q_conv},r);
+        [r,R_] = project({Q(:,j),Q_conv},r,true);
         alpha(j) = R_{1};
         beta(j) = sqrt(r'*r);
         Q(:,j+1) = r/beta(j);
@@ -266,7 +266,7 @@ function [Q,T] = lanczos_selective(A,Q_conv,q,maxiter)
         if j > 1
             r=r-beta(j-1)*Q(:,j-1);
         end
-        [r,R_] = project({Q(:,j),Q_conv,QR(:,1:nritz)},r);
+        [r,R_] = project({Q(:,j),Q_conv,QR(:,1:nritz)},r,true);
         alpha(j) = R_{1};
         beta(j) = sqrt(r'*r);
         Q(:,j+1) = r/beta(j);    
@@ -317,7 +317,7 @@ function [Q,T] = lanczos_periodic(A,Q_conv,q,maxiter)
         if j > 1
             r=r-beta(j-1)*Q(:,j-1);
         end
-        [r,R_] = project({Q(:,j),Q_conv},r);
+        [r,R_] = project({Q(:,j),Q_conv},r,true);
         alpha(j) = R_{1};
         beta(j) = sqrt(r'*r);
         Q(:,j+1) = r/beta(j);
@@ -327,7 +327,7 @@ function [Q,T] = lanczos_periodic(A,Q_conv,q,maxiter)
         omega = update_omega(omega, j, alpha, beta, norm_A);
         err = max(max(abs(omega - eye(size(omega)))));
         if err >= norm_A*sqrt(eps)
-            Q(:,j+1) = projectAndNormalize({Q(:,1:j)},Q(:,j+1),true);
+            Q(:,j:j+1) = projectAndNormalize({Q(:,1:j-1)},Q(:,j:j+1),true);
             omega = reset_omega(omega, j, norm_A);
         end
         

@@ -1,4 +1,4 @@
-function [conv_eigs,Q_conv,conv_rnorms,orth_err] = restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
+function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
 
     max_restarts = 100;
 
@@ -419,7 +419,6 @@ function [Q,T] = lanczos_periodic(A, Q_conv, q, Bk, maxiter, s, basis)
 
     n = length(q);
     Q = zeros(n,maxiter*s);
-    QR = [];
     b = zeros(maxiter+1,1);
     T = [];
     omega = [];
@@ -488,7 +487,13 @@ function [Q,T] = lanczos_periodic(A, Q_conv, q, Bk, maxiter, s, basis)
         omega = update_omega(omega,alpha,beta,norm_A, s);
         err = max(max(abs(omega - eye(size(omega)))));
         if err >= norm_A*sqrt(eps)
-            Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s+1)},Q(:,(k-1)*s+2:k*s+1));
+            prevVecs = 1:(k-2)*s+1;
+            if ~isempty(prevVecs)
+                Q(:,(k-2)*s+2:k*s+1) = projectAndNormalize({Q(:,prevVecs)},Q(:,(k-2)*s+2:k*s+1),true);
+            else
+                orthVecs = max((k-2)*s+2,1):k*s+1;
+                Q(:,orthVecs) = normalize(Q(:,orthVecs),true);
+            end
             omega = reset_omega(omega, norm_A, s);
         end
     end
@@ -506,16 +511,16 @@ function omega = update_omega(omega_in, alpha, beta, anorm, s)
     
     % Estimate of contribution to roundoff errors from A*v:  fl(A*v) = A*v + f, 
     T = eps*anorm;
-    binv = 1.0/beta(n);
-    
+        
     if isempty(omega_in) 
         omega = zeros(s+1,s+1);
         omega(1,1) = 1;
         omega(1,2) = 0;
-        omega(2,1) = binv*T;
+        omega(2,1) = T/beta(1);
         omega(2,2) = 1;
 
         for j = 2:s
+            binv = 1.0/beta(j);
             % k == 1, omega(j,k-1) == 0
             omega(j+1,1) = beta(2)*omega(j,2) + (alpha(1)-alpha(j))*omega(j,1) - beta(j)*omega(j-1,1);
             if omega(j+1,1) > 0
@@ -544,6 +549,7 @@ function omega = update_omega(omega_in, alpha, beta, anorm, s)
         omega(1:m+1,1:m+1) = omega_in;
         
         for j = m+1:m+s
+            binv = 1.0/beta(j);
             % k == 1, omega(j,k-1) == 0
             omega(j+1,1) = beta(2)*omega(j,2) + (alpha(1)-alpha(j))*omega(j,1) - beta(j)*omega(j-1,1);
             if omega(j+1,1) > 0

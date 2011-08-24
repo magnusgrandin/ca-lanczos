@@ -1,7 +1,9 @@
+clear;
+
 output_path = 'results';
 
 matrices_path = 'matrices';
-matrices = {'ex13'};
+matrices = {'nasa2146'};
 %matrices = {'494_bus','662_bus','685_bus','1138_bus','bcsstk01','bcsstk02','bcsstk03','bcsstk04','bcsstk05','bcsstk06','bcsstk07','bcsstk08',...
 %    'bcsstk09','bcsstk10','bcsstk11','bcsstk12','bcsstk13','bcsstk14','bcsstk19','bcsstk20','bcsstk21','bcsstk22','bcsstk23','bcsstk26',...
 %    'bcsstk27','bcsstk34','bcsstm02','bcsstm05','bcsstm06','bcsstm07','bcsstm08','bcsstm09','bcsstm11','bcsstm12','bcsstm19','bcsstm20',...
@@ -23,10 +25,14 @@ orth_error = zeros(length(matrices),1);
 for matrix = matrices
 
     load([matrices_path,'/',cell2mat(matrix)]);
-    r = rand(size(A,1),1);
     A = Problem.A;
+    r = rand(size(A,1),1);
+
+    eigs_ref = sort(eigs(A,10,'lm'),'descend');
+    
     inf_norm = norm(A,'inf');
     A = A/inf_norm;
+    
     for orth = orth_strategies
 
         outfilename = ['ca_lanczos_restart_',cell2mat(matrix),'_',cell2mat(orth),'_',num2str(t),'_',num2str(neigs),'.out'];
@@ -37,26 +43,32 @@ for matrix = matrices
         fprintf(outfile,'s,1,2,4,6,8,10\n');
                 
         % Standard Lanczos
-        [e,Q,ritz_norms,orth_error] = restarted_lanczos(A,r,t,neigs,orth,tol);
+        time = tic;
+        [e,Q,n_restarts,ritz_norms,orth_error] = restarted_lanczos(A,r,t,neigs,orth,tol);
+        time = toc(time);
         full_ritz_norm = zeros(neigs,1);
         if ~isempty(e)
             for i = 1:neigs
                 full_ritz_norm(i) = norm(A*Q(:,i)-e(i)*Q(:,i))/norm(e(i)*Q(:,i));
             end
-            fprintf(outfile,'%.6e,%.6e\n',max(full_ritz_norm),max(orth_error));
+            max_err_ref = max(abs(eigs_ref-e*inf_norm)./(e*inf_norm));
+            fprintf(outfile,'%.6e,%.6e,%.6e,%d,%.6e\n',max(full_ritz_norm),max(orth_error),max_err_ref,n_restarts,time);
         else
             fprintf(outfile,'Did not converge.\n');
         end
         
         % CA-Lanczos
         for s = [1,2,4,6,8,10]
-            [e,Q,ritz_norms,orth_error] = restarted_ca_lanczos(A,r,t,neigs,s,'newton',orth,tol);
+            time = tic;
+            [e,Q,n_restarts,ritz_norms,orth_error] = restarted_ca_lanczos(A,r,t,neigs,s,'newton',orth,tol);
+            time = toc(time);
             full_ritz_norm = zeros(neigs,1);
             if ~isempty(e)
                 for i = 1:neigs
                     full_ritz_norm(i) = norm(A*Q(:,i)-e(i)*Q(:,i))/norm(e(i)*Q(:,i));
                 end
-                fprintf(outfile,'%.6e,%.6e\n',max(full_ritz_norm),max(orth_error));
+                max_err_ref = max(abs(eigs_ref-e*inf_norm)./(e*inf_norm));
+                fprintf(outfile,'%.6e,%.6e,%.6e,%d,%.6e\n',max(full_ritz_norm),max(orth_error),max_err_ref,n_restarts,time);
             else
                 fprintf(outfile,'Did not converge.\n');
             end
