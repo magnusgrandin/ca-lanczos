@@ -327,7 +327,7 @@ function [Q,T] = lanczos_periodic(A,Q_conv,q,maxiter)
         omega = update_omega(omega, j, alpha, beta, norm_A);
         err = max(max(abs(omega - eye(size(omega)))));
         if err >= norm_A*sqrt(eps)
-            Q(:,j:j+1) = projectAndNormalize({Q(:,1:j-1)},Q(:,j:j+1),true);
+            Q(:,j:j+1) = projectAndNormalize({Q(:,1:j-1),Q_conv},Q(:,j:j+1),true);
             omega = reset_omega(omega, j, norm_A);
         end
         

@@ -487,12 +487,13 @@ function [Q,T] = lanczos_periodic(A, Q_conv, q, Bk, maxiter, s, basis)
         omega = update_omega(omega,alpha,beta,norm_A, s);
         err = max(max(abs(omega - eye(size(omega)))));
         if err >= norm_A*sqrt(eps)
-            prevVecs = 1:(k-2)*s+1;
+           %  Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s+1)},Q(:,(k-1)*s+2:k*s+1),true);
+           prevVecs = 1:(k-2)*s+1;
             if ~isempty(prevVecs)
-                Q(:,(k-2)*s+2:k*s+1) = projectAndNormalize({Q(:,prevVecs)},Q(:,(k-2)*s+2:k*s+1),true);
+                Q(:,(k-2)*s+2:k*s+1) = projectAndNormalize({Q(:,prevVecs),Q_conv},Q(:,(k-2)*s+2:k*s+1),true);
             else
                 orthVecs = max((k-2)*s+2,1):k*s+1;
-                Q(:,orthVecs) = normalize(Q(:,orthVecs),true);
+                Q(:,orthVecs) = normalize(Q(:,orthVecs));
             end
             omega = reset_omega(omega, norm_A, s);
         end
