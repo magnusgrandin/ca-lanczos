@@ -80,6 +80,11 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lan
         
         % Get the number of iterations to do next.
         iters = floor((max_lanczos-nconv)/s);
+        if iters == 0
+            % Check if we got all the eigenpairs we were after.
+            restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:s*iters,k+1:s*iters)), n_wanted_eigs);
+            break;
+        end
         
         if strcmpi(orth,'local')
             [Q_new,T] = lanczos_basic(A, Q_conv, q, Bk, iters, s, basis, 'local');
@@ -168,7 +173,7 @@ function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
     m = length(eig_vals);
     if strcmpi(strategy,'largest')
         % Generate new starting vector from the largest non-converged basis vector.
-        l = k+1;
+        l = min(k+1,size(Q,2));
         for j = k+1:m
             if eig_vals(j) > eig_vals(l)
                 l = j;
@@ -177,7 +182,7 @@ function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
         q = Q*eig_vecs(:,l);
     elseif strcmpi(strategy,'smallest')
         % Generate new starting vector from the smallest non-converged basis vector.
-        l = k+1;
+        l = min(k+1,size(Q,2));
         for j = k+1:m
             if eig_vals(j) < eig_vals(l)
                 l = j;

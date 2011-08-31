@@ -27,6 +27,9 @@ function [Q,R,rank] = normalize(X,opt,tol)
         R = S*W';
         Q = Q*U;%, zeros(nrows,ncols-rank)];
         Q = randomizeNullSpace(Q,rank);
+    else
+        % R is not full rank, but return anyway
+        return
     end
 end
 

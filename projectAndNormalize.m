@@ -1,4 +1,4 @@
-function [Q,R] = projectAndNormalize(Q,X,doreorth)
+function [QZ,RZ] = projectAndNormalize(Q,X,doreorth)
 
     if nargin < 3
         doreorth = true;
@@ -10,7 +10,6 @@ function [Q,R] = projectAndNormalize(Q,X,doreorth)
     nrows = size(X,1);
     ncols = size(X,2);
     numBlocksQ = length(Q);
-    R = cell(1,numBlocksQ+1);
     
     % Compute norms of each column of X before first orthogonalization
     if doreorth == true
@@ -21,22 +20,29 @@ function [Q,R] = projectAndNormalize(Q,X,doreorth)
     end
     
     % First block orthogonalization pass
-    [Y,R] = project(Q,X,false);
-    [QY,RY,rank] = normalize(Y);
+    [Y,RY] = project(Q,X,false);
+    [QY,R_,rank] = normalize(Y);
+    RY{numBlocksQ+1} = R_;
     % If R is not full rank, the last ncols-rank columns have been
     % randomized and orthogonalized within QY. Orthogonalize those 
     % columns of QY against the previous Q-blocks.
-    if rank < ncols
-        nullSpaceCols = rank+1:ncols;
-        [QY(:,nullSpaceCols),R_] = project(Q,QY(:,nullSpaceCols),false);
-        [QY(:,nullSpaceCols),R_] = tsqr(QY(:,nullSpaceCols));
-    end
+%     if rank < ncols
+%         disp('Rank deficient');
+%         nullSpaceCols = rank+1:ncols;
+% %        [QY(:,nullSpaceCols),R_] = project(Q,QY(:,nullSpaceCols),false);
+% %        [QY(:,nullSpaceCols),R1] = tsqr(QY(:,nullSpaceCols));
+% %        RY(nullSpaceCols,nullSpaceCols) = R1;
+%         [QY(:,nullSpaceCols),R_] = project(Q,QY(:,nullSpaceCols),false);
+%         [QY(:,nullSpaceCols),R_] = tsqr(QY(:,nullSpaceCols));
+%         %[QY,R_] = project(Q,QY,false);
+%         %[QY,R_] = tsqr(QY);
+%     end
     
     if doreorth == true
         % Compute norms of each column of X after first orthogonalization
         normsAfterFirst = zeros(ncols,1);
         for i = 1:ncols
-            normsAfterFirst(i) = sqrt(sum(RY(:,i).^2));
+            normsAfterFirst(i) = sqrt(sum(RY{numBlocksQ+1}(:,i).^2));
         end
         
         % If any column norm drops too much, do second
@@ -48,21 +54,22 @@ function [Q,R] = projectAndNormalize(Q,X,doreorth)
         end
         
         if reorthogonalize == false
-            Z  = Y;
             QZ = QY;
             RZ = RY;
         else
             disp('second');
-            [Z,R_] = project(Q,Y,false); 
-            [QZ,RZ,rank] = normalize(Z);
+            [Z,RZ] = project(Q,Y,false); 
+            [QZ,R_,rank] = normalize(Z,'randomizeNullSpace');
+            RZ{numBlocksQ+1} = R_;
             % Update coefficients after second pass of orthogonalization
 %            RZ = RZ+RY;
 %            for i = 1:numBlocksQ
 %                R{i} = R{i} + R_{i}*RY;
 %            end
             for i = 1:numBlocksQ
-                R{i} = R{i} + R_{i};
+                RZ{i} = RZ{i} + RY{i};
             end
+            
             % If R is not full rank, the last ncols-rank columns have been
             % randomized and orthogonalized within QZ. Orthogonalize those 
             % columns of QZ against the previous Q-blocks, don't need to 
@@ -74,13 +81,8 @@ function [Q,R] = projectAndNormalize(Q,X,doreorth)
                 [QZ(:,nullSpaceCols),R_] = tsqr(QZ(:,nullSpaceCols));
             end
         end
-    end
-
-    if doreorth == true
-        Q = QZ;
-        R{numBlocksQ+1} = RZ;
     else
-        Q = QY;
-        R{numBlocksQ+1} = RY;
+        QZ = QY;
+        RZ = RY;        
     end
 end
