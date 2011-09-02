@@ -12,8 +12,8 @@ function [QZ,RZ] = projectAndNormalize(Q,X,doreorth)
     numBlocksQ = length(Q);
     
     % Compute norms of each column of X before first orthogonalization
+    normsBeforeFirst = zeros(ncols,1);
     if doreorth == true
-        normsBeforeFirst = zeros(ncols,1);
         for i = 1:ncols
             normsBeforeFirst(i) = sqrt(sum(X(:,i).^2));
         end
