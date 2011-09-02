@@ -143,8 +143,6 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lan
         % Check if we should continue iterations
         restart = check_wanted_eigs(conv_eigs, diag(Dp), n_wanted_eigs);
 
-        nconv, k, restart
-        
         if restart
             q = generateStartVector(diag(Dp),Vp,Q_new,ritz_norms,k,restart_strategy);   
             q = projectAndNormalize({Q_conv},q,true);
@@ -276,16 +274,15 @@ function [Q,T] = lanczos_basic(A, Q_conv, q, Bk, maxiter, s, basis, orth)
         V = matrix_powers(A,q,s,Bk,basis);
         
         if k == 1
-            % Orthogonalize against already converged basis vectors
-            %[Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},V(:,1:s+1),true);
-            %Rk = R_{2};
+            % Orthogonalize initial basis vectors
             [Q_,Rk] = normalize(V(:,1:s+1));
-            [Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},Q_,true);
-            
+            % Orthogonalize against already converged basis vectors
+            [Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},Q_,true);           
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta
             b(k) = T(s+1,s);
+            
         else
             if strcmpi(orth,'local')
                 % Orthogonalize against previous block of basis vectors
@@ -359,9 +356,10 @@ function [Q,T] = lanczos_selective(A, Q_conv, q, Bk, maxiter, s, basis)
         V = matrix_powers(A,q,s,Bk,basis);
         
         if k == 1
+            % Orthogonalize initial basis vectors
+            [Q_,Rk] = normalize(V(:,1:s+1));
             % Orthogonalize against already converged basis vectors
-            [Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},V(:,1:s+1),true);
-            Rk = R_{2};
+            [Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},Q_,true);
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta
@@ -453,9 +451,10 @@ function [Q,T] = lanczos_periodic(A, Q_conv, q, Bk, maxiter, s, basis)
         V = matrix_powers(A,q,s,Bk,basis);
         
         if k == 1
+            % Orthogonalize initial basis vectors
+            [Q_,Rk] = normalize(V(:,1:s+1));
             % Orthogonalize against already converged basis vectors
-            [Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},V(:,1:s+1),true);
-            Rk = R_{2};
+            [Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},Q_,true);
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta
@@ -502,9 +501,9 @@ function [Q,T] = lanczos_periodic(A, Q_conv, q, Bk, maxiter, s, basis)
         err = max(max(abs(omega - eye(size(omega)))));
         if err >= norm_A*sqrt(eps)
            %  Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s+1)},Q(:,(k-1)*s+2:k*s+1),true);
-           prevVecs = 1:(k-2)*s+1;
+           prevVecs = 1:(k-1)*s+1;
             if ~isempty(prevVecs)
-                Q(:,(k-2)*s+2:k*s+1) = projectAndNormalize({Q(:,prevVecs),Q_conv},Q(:,(k-2)*s+2:k*s+1),true);
+                Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,prevVecs),Q_conv},Q(:,(k-1)*s+2:k*s+1),true);
             else
                 orthVecs = max((k-2)*s+2,1):k*s+1;
                 Q(:,orthVecs) = normalize(Q(:,orthVecs));
