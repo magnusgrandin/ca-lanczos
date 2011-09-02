@@ -123,7 +123,7 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_lanczo
 
         if restart
             q = generateStartVector(diag(Dp),Vp,Q_new,ritz_norms,k,restart_strategy);                
-            q = project({Q(:,1:nconv+k)},q,true);
+            q = project({Q(:,1:nconv)},q,true);
         end
     end
     
