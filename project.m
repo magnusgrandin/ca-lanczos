@@ -16,7 +16,7 @@ function [X,R] = project(Q,X,doreorth)
         return;
     end
     % Quick exit if empty array or no blocks.
-    if isempty(Q) || isempty(Q{1})
+    if isempty(Q)
         R = {};
         return;
     end
@@ -41,7 +41,7 @@ function [X,R] = project(Q,X,doreorth)
         normAfter = multiVecNorm2(X);
         rho = 0.5;%1/sqrt(2);
         normDiff = rho*normBefore-normAfter;
-        if max(normDiff) > 0
+        if max(normDiff) < 0
             for i = 1:numBlocks
                 if ~isempty(Q{i})
                     R2{i} = Q{i}'*X;
