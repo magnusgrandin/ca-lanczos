@@ -108,7 +108,6 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_lanczo
             end
         end
         
-        q = generateStartVector(diag(Dp),Vp,Q_new,ritz_norms,k,restart_strategy);                
         
         for i = 1:k
             Q(:,i+nconv) = Q_new*Vp(:,i);
@@ -116,15 +115,18 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_lanczo
             conv_rnorms = [conv_rnorms; ritz_norms(i)];
         end
         
-        q = projectAndNormalize({Q(:,1:nconv+k)},q,true);
-        
         % Update the count of converged eigenvalues
         nconv = nconv+k;
-  
         Q_conv = Q(:,1:nconv);
-
+        
         restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:iters,k+1:iters)), n_wanted_eigs);
+
+        if restart
+            q = generateStartVector(diag(Dp),Vp,Q_new,ritz_norms,k,restart_strategy);                
+            q = project({Q(:,1:nconv+k)},q,true);
+        end
     end
+    
     if ~restart
         [sort_eigs,ixs] = sort(conv_eigs,'descend');
         sort_rnorms = conv_rnorms(ixs);
@@ -235,15 +237,14 @@ function [Q,T] = lanczos_basic(A,Q_conv,q,maxiter,orth)
         if j > 1
             r=r-beta(j-1)*Q(:,j-1);
         end
-%         alpha(j) = r'*Q(:,j);
-%         r = r - alpha(j)*Q(:,j);
-        [r,R_] = project({Q(:,j),Q_conv},r,true);
+        if strcmpi(orth,'local')
+            [r,R_] = project({Q(:,j),Q_conv},r,true);
+        elseif strcmpi(orth,'fro')
+            [r,R_] = project({Q(:,j),Q_conv,Q(:,1:j)},r,true);
+        end
         alpha(j) = R_{1};
         beta(j) = sqrt(r'*r);
         Q(:,j+1) = r/beta(j);
-        if strcmpi(orth,'fro') == 1
-            Q(:,j+1) = projectAndNormalize({Q(:,1:j)},Q(:,j+1),true);
-        end
         j = j+1;
     end
     
