@@ -29,10 +29,11 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lan
             return;
         end
     end
+    norm_A = normest(A);
     if nargin < 8 || isempty(tol)
         tol = 1.0e-06;
     end
-    tol = tol*normest(A);
+    tol = tol*norm_A;
 
     if strcmpi(orth,'local')
         disp('Local orthogonalization');
@@ -110,7 +111,7 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lan
         beta = T(s*iters+1,s*iters);
         for i = 1:s*iters
             y = Vp(:,i);
-            ritz_norms(i) = beta*abs(y(s*iters));
+            ritz_norms(i) = beta*abs(y(s*iters)) + eps*norm_A;
         end
                
         % Rearrange the eigenvalues such that the converged ones are first.
@@ -129,23 +130,25 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lan
             end
         end
         
-        q = generateStartVector(diag(Dp),Vp,Q_new,ritz_norms,k,restart_strategy);
-
+        
         for i = 1:k
             Q(:,i+nconv) = Q_new*Vp(:,i);
             conv_eigs = [conv_eigs; Dp(i,i)];
             conv_rnorms = [conv_rnorms; ritz_norms(i)];
         end
-        
-        q = projectAndNormalize({Q(:,1:nconv+k)},q,true);
-               
         % Update the count of converged eigenvalues
         nconv = nconv+k;
-
         Q_conv = Q(:,1:nconv);
 
         % Check if we should continue iterations
-        restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:s*iters,k+1:s*iters)), n_wanted_eigs);
+        restart = check_wanted_eigs(conv_eigs, diag(Dp), n_wanted_eigs);
+
+        nconv, k, restart
+        
+        if restart
+            q = generateStartVector(diag(Dp),Vp,Q_new,ritz_norms,k,restart_strategy);   
+            q = projectAndNormalize({Q_conv},q,true);
+        end
     end
 
     if ~restart
@@ -173,7 +176,7 @@ function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
     m = length(eig_vals);
     if strcmpi(strategy,'largest')
         % Generate new starting vector from the largest non-converged basis vector.
-        l = min(k+1,size(Q,2));
+        l = k+1;
         for j = k+1:m
             if eig_vals(j) > eig_vals(l)
                 l = j;
@@ -182,7 +185,7 @@ function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
         q = Q*eig_vecs(:,l);
     elseif strcmpi(strategy,'smallest')
         % Generate new starting vector from the smallest non-converged basis vector.
-        l = min(k+1,size(Q,2));
+        l = k+1;
         for j = k+1:m
             if eig_vals(j) < eig_vals(l)
                 l = j;
@@ -216,9 +219,14 @@ function restart = check_wanted_eigs(conv_eigs, eigs, num_wanted_eigs)
         % Quick exit, no new eigs
         restart = true;
     else
-        max_eig = max(eigs);
-        largest_conv_eigs = find(conv_eigs > max_eig);
-        if length(largest_conv_eigs) >= num_wanted_eigs
+%        max_eig = max(eigs);
+%        largest_conv_eigs = find(conv_eigs > max_eig);
+%        if length(largest_conv_eigs) >= num_wanted_eigs
+%            restart = false;
+%        else
+%            restart = true;
+%        end
+        if length(conv_eigs) >= num_wanted_eigs
             restart = false;
         else
             restart = true;
@@ -268,10 +276,12 @@ function [Q,T] = lanczos_basic(A, Q_conv, q, Bk, maxiter, s, basis, orth)
         V = matrix_powers(A,q,s,Bk,basis);
         
         if k == 1
-            % QR factorization
-            [Q(:,1:s+1),Rk] = normalize(V(:,1:s+1));
             % Orthogonalize against already converged basis vectors
-            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),true);
+            %[Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},V(:,1:s+1),true);
+            %Rk = R_{2};
+            [Q_,Rk] = normalize(V(:,1:s+1));
+            [Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},Q_,true);
+            
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta
@@ -285,10 +295,11 @@ function [Q,T] = lanczos_basic(A, Q_conv, q, Bk, maxiter, s, basis, orth)
                 Rk_s = Rk_{3};
             elseif strcmpi(orth,'fro')
                 % Orthogonality against all previous basis vectors
-                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1),Q(:,1:(k-1)*s+1),Q_conv},V(:,2:s+1),true);
-                Q(:,(k-1)*s+2:k*s+1) = Q_(:,1:s);
-                Rkk_s = Rk_{1};
-                Rk_s = Rk_{4};
+                [Q_,Rk_] = projectAndNormalize({Q(:,1:(k-2)*s),Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),true);
+                Rkk_s = Rk_{2};
+                Rk_s = Rk_{3};
+                [Q_,R_] = projectAndNormalize({Q_conv,},Q_,true);
+                Q(:,(k-1)*s+2:k*s+1) = Q_;
             end
             
             % Compute Tk (tridiagonal sub-matrix of T)
@@ -348,10 +359,9 @@ function [Q,T] = lanczos_selective(A, Q_conv, q, Bk, maxiter, s, basis)
         V = matrix_powers(A,q,s,Bk,basis);
         
         if k == 1
-            % QR factorization
-            [Q(:,1:s+1),Rk] = normalize(V(:,1:s+1));
             % Orthogonalize against already converged basis vectors
-            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),true);
+            [Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},V(:,1:s+1),true);
+            Rk = R_{2};
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta
@@ -443,10 +453,9 @@ function [Q,T] = lanczos_periodic(A, Q_conv, q, Bk, maxiter, s, basis)
         V = matrix_powers(A,q,s,Bk,basis);
         
         if k == 1
-            % QR factorization
-            [Q(:,1:s+1),Rk] = normalize(V(:,1:s+1));
             % Orthogonalize against already converged basis vectors
-            [Q(:,1:s+1)] = projectAndNormalize({Q_conv},Q(:,1:s+1),true);
+            [Q(:,1:s+1),R_] = projectAndNormalize({Q_conv},V(:,1:s+1),true);
+            Rk = R_{2};
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta

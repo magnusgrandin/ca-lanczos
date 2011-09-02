@@ -25,10 +25,11 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_lanczo
             return;
         end
     end
+    norm_A = normest(A);
     if nargin < 6 || isempty(tol)
         tol = 1.0e-06;
     end
-    tol = tol*normest(A);
+    tol = tol*norm_A;
 
     if strcmpi(orth,'local')
         disp('Local orthogonalization');
@@ -88,7 +89,7 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_lanczo
         beta = T(iters+1,iters);
         for i = 1:iters
             y = Vp(:,i);
-            ritz_norms(i) = beta*abs(y(iters));
+            ritz_norms(i) = beta*abs(y(iters)) + eps*norm_A;
         end
         
         % Rearrange the eigenvalues such that the converged ones are first.
@@ -192,9 +193,14 @@ function restart = check_wanted_eigs(conv_eigs, eigs, num_wanted_eigs)
         % Quick exit, no new eigs
         restart = true;
     else
-        max_eig = max(eigs);
-        largest_conv_eigs = find(conv_eigs > max_eig);
-        if length(largest_conv_eigs) >= num_wanted_eigs
+%         max_eig = max(eigs);
+%         largest_conv_eigs = find(conv_eigs > max_eig);
+%         if length(largest_conv_eigs) >= num_wanted_eigs
+%             restart = false;
+%         else
+%             restart = true;
+%         end
+        if length(conv_eigs) >= num_wanted_eigs
             restart = false;
         else
             restart = true;
@@ -236,7 +242,7 @@ function [Q,T] = lanczos_basic(A,Q_conv,q,maxiter,orth)
         beta(j) = sqrt(r'*r);
         Q(:,j+1) = r/beta(j);
         if strcmpi(orth,'fro') == 1
-            Q(:,j+1) = projectAndNormalize({Q(:,1:j),Q_conv},Q(:,j+1),true);
+            Q(:,j+1) = projectAndNormalize({Q(:,1:j)},Q(:,j+1),true);
         end
         j = j+1;
     end
