@@ -8,8 +8,8 @@
 %% - orth_strategies: Orthogonalization strategies to run.
 %% - basis: Which basis should be used.
 
-output_path = 'results';
-matrices_path = 'matrices';
+output_path = '../results';
+matrices_path = '../matrices';
 
 matrices = {'1138_bus'};%,'Chem97ZtZ','finan512','fv2','fv3','mhdb416','msc04515','plat1919'};
 

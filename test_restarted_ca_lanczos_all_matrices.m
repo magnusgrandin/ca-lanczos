@@ -1,8 +1,8 @@
 clear;
 
-output_path = 'results';
+output_path = '../results';
 
-matrices_path = 'matrices';
+matrices_path = '../matrices';
 matrices = {'494_bus','662_bus','685_bus','1138_bus','bcsstk01','bcsstk02','bcsstk03','bcsstk04','bcsstk05','bcsstk06','bcsstk07','bcsstk08',...
     'bcsstk09','bcsstk10','bcsstk11','bcsstk12','bcsstk13','bcsstk14','bcsstk19','bcsstk20','bcsstk21','bcsstk22','bcsstk23','bcsstk26',...
     'bcsstk27','bcsstk34','bcsstm02','bcsstm05','bcsstm06','bcsstm07','bcsstm08','bcsstm09','bcsstm11','bcsstm12','bcsstm19','bcsstm20',...
