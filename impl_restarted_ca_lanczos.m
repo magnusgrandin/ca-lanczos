@@ -68,15 +68,15 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_c
 
     Q = zeros(n,max_lanczos+s);
     Q_conv = [];
+    Vk = zeros(n,n_wanted_eigs);
     conv_eigs = [];
     conv_rnorms = [];
     orth_err = [];
        
     m = max_lanczos;
     k = n_wanted_eigs;
-    p = m-k;
 
-    % Compute initial m-step Lanczos factorization
+    % Compute initial p-step Lanczos factorization
     if strcmpi(orth,'local')
         [Qm,Tm] = lanczos_basic(A, [], q, Bk, floor(m/s), s, basis, 'local');
     elseif strcmpi(orth,'full')
@@ -92,57 +92,61 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_c
                
         num_restarts = num_restarts+1;
        
+        k0 = k - mod(nconv+s,s);
+        p0 = m - k - s*floor(nconv/s);
+        
         [Vm,Dm] = eig(Tm(1:m,1:m));
         mu = sort(diag(Dm),'descend'); % TODO: This only covers the case of the largest eigenvalues
-        mu = mu(1+k:p+k);
+        mup = mu(nconv+k0+1:m);
         
-        Q = eye(m);
-        for j = 1:p
-            [Qj,Rj] = qr(Tm(1:m,1:m)-mu(j)*eye(m));
-            Tm = Qj'*Tm(1:m,1:m)*Qj;
+        Q = eye(m-nconv);
+        for j = 1:p0
+            [Qj,Rj] = qr(Tm(nconv+1:m,nconv+1:m)-mup(j)*eye(m-nconv));
+            Tm(nconv+1:m,nconv+1:m) = Qj'*Tm(nconv+1:m,nconv+1:m)*Qj;
             Q = Q*Qj;
         end
 
-        beta = Tm(k+1,k);
-        sigma = Q(m,k);
+        beta = Tm(nconv+k0+1,nconv+k0);
+        sigma = mu(nconv+k0);
         rm = Qm(:,m+1);
-        rk = Qm(:,k+1)*beta + rm*sigma;
-        Vk = Qm(:,1:m)*Q(:,1:k);
-        Tk = Tm(1:k,1:k);
+        rk = Qm(:,nconv+k0+1)*beta + rm*sigma;
+        Vk(:,nconv+1:nconv+k0) = Qm(:,nconv+1:m)*Q(:,1:k0);
+        Tk = Tm(1:nconv+k0,1:nconv+k0);
                       
         % Complete the m-step Lanczos factorization by applying p more steps
         if strcmpi(orth,'local')
-            [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p/s), s, basis, 'local');
+            [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p0/s), s, basis, 'local');
         elseif strcmpi(orth,'full')
-            [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p/s), s, basis, 'fro');
+            [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p0/s), s, basis, 'fro');
         else
             % Do nothing
         end  
-        Tm = [Tk, beta*eyeshvec(k)*eye(p,1)'; beta*eye(p,1)*eyeshvec(k)', Tp(1:p,1:p)];
+   
+        Tm = [Tk, beta*eyeshvec(nconv+k0)*eye(p0,1)'; beta*eye(p0,1)*eyeshvec(nconv+k0)', Tp(1:p0,1:p0)];
         Qm = Qp;
-        
+
         % Compute residual norm estimates of all computed ritz-pairs.
         %beta = Tm(k+1,k);
-        new_conv = true;
-        while new_conv
-            [Vp,Dp] = eig(Tm(nconv+1:m,nconv+1:m));
-            iter_count = 0;
-            for i = 1:m-nconv
-                y = Vp(:,i);
-                ritz_norm = beta*abs(y(m-nconv));
-                if ritz_norm <= tol
-                    nconv = nconv+1;
-                    conv_rnorm(nconv) = ritz_norm;
-                    Tm(nconv:m,nconv:m) = deflate(y,Tm(nconv:m,nconv:m));
-                    break;
-                end
-                iter_count = iter_count + 1;
+        [Vp,Dp] = eig(Tm(nconv+1:nconv+k0,nconv+1:nconv+k0));
+        iter_count = 0;
+        for i = 1:k0
+            y = Vp(:,i);
+            ritz_norm = beta*abs(y(k0));
+            if ritz_norm <= tol
+                %conv_rnorm(nconv+1) = ritz_norm;
+                Tm(nconv+1:nconv+k0,nconv+1:nconv+k0) = deflate(y,Tm(nconv+1:nconv+k0,nconv+1:nconv+k0));
+                nconv = nconv+1;
+                Dp(i,i)
+                break;
             end
-            if iter_count == m-nconv
-                new_conv = false;
-            end
+            iter_count = iter_count + 1;
         end
-        
+        if iter_count < m-nconv
+            new_conv = true;
+        else
+            new_conv = false;
+        end
+
         disp('');
 
         % 1. Initially, lock Ritz values as they converge until k values have been locked
