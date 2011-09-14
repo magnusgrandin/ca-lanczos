@@ -1,6 +1,6 @@
 function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
 
-    max_restarts = 10;
+    max_restarts = 40;
 
     % Check input arguments
     if nargin < 3
@@ -72,11 +72,18 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_c
     conv_eigs = [];
     conv_rnorms = [];
     orth_err = [];
-       
-    m = max_lanczos;
-    k = n_wanted_eigs;
 
-    % Compute initial p-step Lanczos factorization
+    if mod(n_wanted_eigs,s) ~= 0
+        % TODO: Fix!!
+        disp('Warning: Number of wanted eigs is not a multiple of s.');
+        return;
+    end
+    
+    k = n_wanted_eigs;
+    p = s*floor((max_lanczos-k)/s);
+    m = k+p;
+    
+    % Compute initial m-step Lanczos factorization
     if strcmpi(orth,'local')
         [Qm,Tm] = lanczos_basic(A, [], q, Bk, floor(m/s), s, basis, 'local');
     elseif strcmpi(orth,'full')
@@ -88,64 +95,49 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_c
     num_restarts = 0;
     restart = true;
     nconv = 0;
-    while(restart && num_restarts < max_restarts)
+    while(restart && (num_restarts < max_restarts))
                
         num_restarts = num_restarts+1;
-       
-        k0 = k - mod(nconv+s,s);
-        p0 = m - k - s*floor(nconv/s);
-        
+              
         [Vm,Dm] = eig(Tm(1:m,1:m));
-        mu = sort(diag(Dm),'descend'); % TODO: This only covers the case of the largest eigenvalues
-        mup = mu(nconv+k0+1:m);
+        eigsSorted = sort(diag(Dm),'descend'); % TODO: This only covers the case of the largest eigenvalues
         
-        Q = eye(m-nconv);
-        for j = 1:p0
-            [Qj,Rj] = qr(Tm(nconv+1:m,nconv+1:m)-mup(j)*eye(m-nconv));
-            Tm(nconv+1:m,nconv+1:m) = Qj'*Tm(nconv+1:m,nconv+1:m)*Qj;
-            Q = Q*Qj;
+        % Check stopping criteria
+        beta = Tm(m+1,m);
+        if abs(beta*Vm(m,m)) < tol
+            disp('Converged.');
+            break;
         end
 
-        beta = Tm(nconv+k0+1,nconv+k0);
-        sigma = mu(nconv+k0);
-        rm = Qm(:,m+1);
-        rk = Qm(:,nconv+k0+1)*beta + rm*sigma;
-        Vk(:,nconv+1:nconv+k0) = Qm(:,nconv+1:m)*Q(:,1:k0);
-        Tk = Tm(1:nconv+k0,1:nconv+k0);
+        u = eigsSorted(k+1:k+p);
+
+        %%%%%%%%%%%%%
+        I = eye(m);
+        for j = 1:p
+            [Qj,Rj] = qr(Tm(1:m,1:m)-u(j)*I);
+            Qm(:,1:m) = Qm(:,1:m)*Qj;
+            Tm(1:m,1:m) = Qj'*Tm(1:m,1:m)*Qj;
+            Tm(m+1,:) = Tm(m+1,:)*Qj;
+        end
+        %%%%%%%%%%%%%
+        
+        b = Tm(k+1,k);
+        Vk(:,1:k) = Qm(:,1:k);
+        rk = Qm(:,m+1);
+        Tk = [Tm(1:k,1:k); zeros(1,k-1), b];
                       
         % Complete the m-step Lanczos factorization by applying p more steps
         if strcmpi(orth,'local')
-            [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p0/s), s, basis, 'local');
+            [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p/s), s, basis, 'local');
         elseif strcmpi(orth,'full')
-            [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p0/s), s, basis, 'fro');
+            [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p/s), s, basis, 'fro');
         else
             % Do nothing
-        end  
-   
-        Tm = [Tk, beta*eyeshvec(nconv+k0)*eye(p0,1)'; beta*eye(p0,1)*eyeshvec(nconv+k0)', Tp(1:p0,1:p0)];
+        end
+        
+        Tm = [Tk(1:k,1:k), b*eyeshvec(k)*eye(p,1)'; b*eye(p,1)*eyeshvec(k)', Tp(1:p,1:p); Tp(p+1,p)*eyeshvec(k+p)'];
         Qm = Qp;
 
-        % Compute residual norm estimates of all computed ritz-pairs.
-        %beta = Tm(k+1,k);
-        [Vp,Dp] = eig(Tm(nconv+1:nconv+k0,nconv+1:nconv+k0));
-        iter_count = 0;
-        for i = 1:k0
-            y = Vp(:,i);
-            ritz_norm = beta*abs(y(k0));
-            if ritz_norm <= tol
-                %conv_rnorm(nconv+1) = ritz_norm;
-                Tm(nconv+1:nconv+k0,nconv+1:nconv+k0) = deflate(y,Tm(nconv+1:nconv+k0,nconv+1:nconv+k0));
-                nconv = nconv+1;
-                Dp(i,i)
-                break;
-            end
-            iter_count = iter_count + 1;
-        end
-        if iter_count < m-nconv
-            new_conv = true;
-        else
-            new_conv = false;
-        end
 
         disp('');
 
