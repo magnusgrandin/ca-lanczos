@@ -295,7 +295,7 @@ function [Q,T] = lanczos_basic(A, Q_conv, q, Bk, maxiter, s, basis, orth)
                 [Q_,Rk_] = projectAndNormalize({Q(:,1:(k-2)*s),Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),true);
                 Rkk_s = Rk_{2};
                 Rk_s = Rk_{3};
-                [Q_,R_] = projectAndNormalize({Q_conv,},Q_,true);
+                [Q_,R_] = projectAndNormalize({Q_conv},Q_,true);
                 Q(:,(k-1)*s+2:k*s+1) = Q_;
             end
             
