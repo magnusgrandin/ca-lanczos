@@ -17,10 +17,7 @@
 %     orthl   - the level of orthogonality in each step (||I-Vj'*Vj||)
 %--------------------------------------------------------------------------
 function [T,Q,ritz_rnorm,orth_err] = lanczos(A,r,maxiter,orth)
- 
-    global g_lanczos_do_compute_ritz_rnorm;
-    global g_lanczos_do_compute_orth_err;
-    
+   
     if nargin < 4
         orth = 'local';
     else
@@ -36,14 +33,6 @@ function [T,Q,ritz_rnorm,orth_err] = lanczos(A,r,maxiter,orth)
     end
 
     % Check required output arguments
-    g_lanczos_do_compute_ritz_rnorm = false;
-    g_lanczos_do_compute_orth_err = false;
-    if nargout >= 3
-        g_lanczos_do_compute_ritz_rnorm = true;
-    end
-    if nargout >= 4 
-        g_lanczos_do_compute_orth_err = true;
-    end
 
     if strcmpi(orth,'local')
         disp('Local orthogonalization');
@@ -78,15 +67,14 @@ function V = orthogonalize(V,iter,orth)
 end
 
 function [ritz_rnorm] = compute_ritz_rnorm(A,Q,Vp,Dp)
-    ritz_rnorm = [];
-    % Residual norm for smallest eigenpair
-    [d_s,i_s] = min(diag(Dp));
-    x_s = Q*Vp(:,i_s);
-    ritz_rnorm(1) = norm(A*x_s-d_s*x_s)/norm(d_s*x_s);  
-    % Residual norm for largest eigenpair
-    [d_l,i_l] = max(diag(Dp));
-    x_l = Q*Vp(:,i_l);
-    ritz_rnorm(2) = norm(A*x_l-d_l*x_l)/norm(d_l*x_l);
+    m = size(Vp,1);
+    ritz_rnorm = zeros(1,m);
+    [d,ix] = sort(diag(Dp),'descend');
+    for i = 1:m
+        l = d(i);
+        x = Q*Vp(:,ix(i));
+        ritz_rnorm(i) = norm(A*x-l*x)/norm(l*x);
+    end
 end
 
 function [orth_err] = compute_orth_err(Q)      
@@ -94,9 +82,6 @@ function [orth_err] = compute_orth_err(Q)
 end
 
 function [Q,T,rnorm,ortherr] = lanczos_basic(A,q,maxiter,orth)
-
-    global g_lanczos_do_compute_ritz_rnorm;
-    global g_lanczos_do_compute_orth_err;
 
     if nargin < 4
         orth = 'local';
@@ -107,7 +92,7 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A,q,maxiter,orth)
     Q(:,1) = q;
     alpha = zeros(1,maxiter);
     beta = zeros(1,maxiter);
-    rnorm = zeros(maxiter,2);
+    rnorm = zeros(maxiter,maxiter);
     ortherr = zeros(maxiter,1);
 
     has_converged = false;
@@ -128,15 +113,16 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A,q,maxiter,orth)
         end   
      
         % Compute the ritz-norm, if it is required
-        if g_lanczos_do_compute_ritz_rnorm && j > 2
-            T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
+        if nargout >= 3
+            T = diag(alpha(1:j)) + diag(beta(1:j-1),1) + diag(beta(1:j-1),-1);
             [Vp,Dp] = eig(T);
-            rnorm(j,:) = compute_ritz_rnorm(A,Q(:,1:j-1),Vp,Dp);
+            rnorm(j,1:j) = compute_ritz_rnorm(A,Q(:,1:j),Vp,Dp);
         end
-        
-        % Compute the orthogonalization error, if it is required
-        if g_lanczos_do_compute_orth_err && j > 2
-            ortherr(j) = compute_orth_err(Q(:,1:j-1));
+               
+        % Compute the orthogonalization error
+        if nargout >= 4
+            Q_ = Q(:,1:j);
+            ortherr(j) = norm(eye(size(Q_,2))-Q_'*Q_,'fro');
         end
                        
         j = j+1;
@@ -149,9 +135,6 @@ end
 
 function [Q,T,rnorm,ortherr] = lanczos_selective(A,q,maxiter)
 
-    global g_lanczos_do_compute_ritz_rnorm;
-    global g_lanczos_do_compute_orth_err;
-    
     n = length(q);
     Q = zeros(n,maxiter);
     QR = zeros(n,maxiter);
@@ -200,14 +183,14 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A,q,maxiter)
         end
      
         % Compute the ritz-norm, if it is required
-        if g_lanczos_do_compute_ritz_rnorm && j > 2
+        if nargout <= 3
             T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
             [Vp,Dp] = eig(T);
             rnorm(j,:) = compute_ritz_rnorm(A,Q(:,1:j-1),Vp,Dp);
         end
         
         % Compute the orthogonalization error, if it is required
-        if g_lanczos_do_compute_orth_err && j > 2
+        if nargout <= 4
             ortherr(j) = compute_orth_err(Q(:,1:j-1));
         end
                        
@@ -220,9 +203,6 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A,q,maxiter)
 end
    
 function [Q,T,rnorm,ortherr] = lanczos_periodic(A,q,maxiter)
-
-    global g_lanczos_do_compute_ritz_rnorm;
-    global g_lanczos_do_compute_orth_err;
 
     n = length(q);
     Q = zeros(n,maxiter);
@@ -248,14 +228,14 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A,q,maxiter)
         Q(:,j+1) = r/beta(j);
         
         % Compute the ritz-norm, if it is required
-        if g_lanczos_do_compute_ritz_rnorm && j > 2
+        if nargout <= 3
             T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
             [Vp,Dp] = eig(T);
             rnorm(j,:) = compute_ritz_rnorm(A,Q(:,1:j-1),Vp,Dp);
         end
         
         % Compute the orthogonalization error, if it is required
-        if g_lanczos_do_compute_orth_err && j > 2
+        if nargout <= 4
             ortherr(j) = compute_orth_err(Q(:,1:j-1));
         end
                        
