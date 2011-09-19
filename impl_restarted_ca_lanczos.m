@@ -1,11 +1,10 @@
-function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
+function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
 
     max_restarts = 40;
 
     % Check input arguments
     if nargin < 3
-        disp('Usage:');
-        disp('  [E,{V},{r},{o}] = restarted_ca_lanczos(A, r, max_iter, {n_wanted_eigs}, {s}, {basis}, {orth}, {tol})')
+        disp('ERROR: Wrong number of input arguments.')
     end
     if nargin < 4 || isempty(n_wanted_eigs)
         n_wanted_eigs = 10;
@@ -29,20 +28,18 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_c
             return;
         end
     end
-    norm_A = normest(A);
     if nargin < 8 || isempty(tol)
         tol = 1.0e-06;
     end
-    tol = tol*norm_A;
+    
+    % Adjust the tolerance according to the norm of A.
+    %norm_A = normest(A);
+    %tol = tol*norm_A;
 
     if strcmpi(orth,'local')
         disp('Local orthogonalization');
     elseif strcmpi(orth,'full')
         disp('Full orthogonalization');
-    elseif strcmpi(orth,'periodic')
-        disp('Periodic orthogonalization');
-    elseif strcmpi(orth,'selective')
-        disp('Selective orthogonalization');
     end
 
     restart_strategy = 'largest'; % 'largest','smallest','closest_conv','random'
@@ -66,8 +63,6 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_c
         Bk = newton_basis_matrix(basis_shifts, s,1);
     end
 
-    Q = zeros(n,max_lanczos+s);
-    Q_conv = [];
     Vk = zeros(n,n_wanted_eigs);
     conv_eigs = [];
     conv_rnorms = [];
@@ -102,9 +97,27 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_c
         [Vm,Dm] = eig(Tm(1:m,1:m));
         eigsSorted = sort(diag(Dm),'descend'); % TODO: This only covers the case of the largest eigenvalues
         
+        
         % Check stopping criteria
-        beta = Tm(m+1,m);
-        if abs(beta*Vm(m,m)) < tol
+%         hasConverged = true;
+%         beta = Tm(m+1,m);
+%         for i = 1:m
+%             d = Dm(i,i);
+%             y = Vm(:,i);
+%             if abs(beta*y(m))/abs(d) > tol
+%                 hasConverged = false;
+%                 break;
+%             end
+%         end
+%         if hasConverged
+%             restart = false;
+%             disp('Converged.');
+%             break;
+%         end
+
+        beta = Tm(k+1,k);
+        if abs(beta*Vm(m,k)) < tol
+            restart = false;
             disp('Converged.');
             break;
         end
@@ -138,9 +151,7 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_c
         Tm = [Tk(1:k,1:k), b*eyeshvec(k)*eye(p,1)'; b*eye(p,1)*eyeshvec(k)', Tp(1:p,1:p); Tp(p+1,p)*eyeshvec(k+p)'];
         Qm = Qp;
 
-
-        disp('');
-
+        % For deflation:
         % 1. Initially, lock Ritz values as they converge until k values have been locked
         % 2. Continue to iterate, lock every new Ritz value that is better than any of 
         %    the already locked ones. Purge all unwanted but yet converged Ritz values.
@@ -151,157 +162,19 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = impl_restarted_c
         %    existing locked Ritz values, the iteration is stopped.
         %
 
-
-%         % Get the number of iterations to do next.
-%         iters = floor((max_lanczos-nconv)/s);
-%         if iters == 0
-%             % Check if we got all the eigenpairs we were after.
-%             restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:s*iters,k+1:s*iters)), n_wanted_eigs);
-%             break;
-%         end
-%         
-%         if strcmpi(orth,'local')
-%             [Q_new,T] = lanczos_basic(A, Q_conv, q, Bk, iters, s, basis, 'local');
-%         elseif strcmpi(orth,'full')
-%             [Q_new,T] = lanczos_basic(A, Q_conv, q, Bk, iters, s, basis, 'fro');
-%         elseif strcmpi(orth,'periodic')
-%             [Q_new,T] = lanczos_periodic(A, Q_conv, q, Bk, iters, s, basis);
-%         elseif strcmpi(orth,'selective')
-%             [Q_new,T] = lanczos_selective(A, Q_conv, q, Bk, iters, s, basis);
-%         else
-%             % Do nothing
-%         end
-%  
-%         % Update the maximum orthogonalization error
-%         if nargout >= 4
-%             Q_ = [Q_conv Q_new];
-%             orth_err = [orth_err; norm(eye(size(Q_,2))-Q_'*Q_,'fro')];
-%         end
-% 
-%         % Compute residual norm estimates of all computed ritz-pairs.
-%         ritz_norms = zeros(s*iters,1);
-%         [Vp,Dp] = eig(T(1:s*iters,1:s*iters));
-%         beta = T(s*iters+1,s*iters);
-%         for i = 1:s*iters
-%             y = Vp(:,i);
-%             ritz_norms(i) = beta*abs(y(s*iters)) + eps*norm_A;
-%         end
-%                
-%         % Rearrange the eigenvalues such that the converged ones are first.
-%         k = 0;
-%         for i = 1:s*iters
-%             if ritz_norms(i) < tol
-%                 k = k + 1;
-%                 % Push converged eigenvalues to the left.
-%                 Dp_temp = Dp(i,i); Dp(i,i) = Dp(k,k); Dp(k,k) = Dp_temp;
-%                 % Push corresponding eigenvectors to the left.
-%                 Vp_temp = Vp(:,i); Vp(:,i) = Vp(:,k); Vp(:,k) = Vp_temp;
-%                 % Push converged residual ritz norms to the left.
-%                 rn_temp = ritz_norms(i); ritz_norms(i) = ritz_norms(k); ritz_norms(k) = rn_temp;
-%                 ritz_norms(k)
-%                 Dp(k,k)
-%             end
-%         end
-%         
-%         
-%         for i = 1:k
-%             Q(:,i+nconv) = Q_new*Vp(:,i);
-%             conv_eigs = [conv_eigs; Dp(i,i)];
-%             conv_rnorms = [conv_rnorms; ritz_norms(i)];
-%         end
-%         % Update the count of converged eigenvalues
-%         nconv = nconv+k;
-%         Q_conv = Q(:,1:nconv);
-% 
-%         % Check if we should continue iterations
-%         restart = check_wanted_eigs(conv_eigs, diag(Dp), n_wanted_eigs);
-% 
-%         if restart
-%             q = generateStartVector(diag(Dp),Vp,Q_new,ritz_norms,k,restart_strategy);   
-%             q = projectAndNormalize({Q_conv},q,true);
-%         end
     end
 
-%    if ~restart
-        [sort_eigs,ixs] = sort(conv_eigs,'descend');
-        sort_rnorms = conv_rnorms(ixs);
-        conv_eigs = sort_eigs(1:n_wanted_eigs);
-        conv_rnorms = sort_rnorms(1:n_wanted_eigs);
-        Q_conv = Q_conv(:,ixs);
-        Q_conv = Q_conv(:,1:n_wanted_eigs);
-        disp(['Converged in ' num2str(num_restarts) ' restarts.']);
-        disp(['Max residual norm: ' num2str(max(conv_rnorms))]);
-%     else       
-%         disp(['Did not converge.']);
-%         conv_eigs = [];
-%         conv_rnorms = [];
-%         Q_conv = [];
-%         orth_err = [];
-%     end
-end
-
-function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
-    if nargin < 4
-        strategy = 'largest';
-    end
-    m = length(eig_vals);
-    if strcmpi(strategy,'largest')
-        % Generate new starting vector from the largest non-converged basis vector.
-        l = k+1;
-        for j = k+1:m
-            if eig_vals(j) > eig_vals(l)
-                l = j;
-            end
-        end
-        q = Q*eig_vecs(:,l);
-    elseif strcmpi(strategy,'smallest')
-        % Generate new starting vector from the smallest non-converged basis vector.
-        l = k+1;
-        for j = k+1:m
-            if eig_vals(j) < eig_vals(l)
-                l = j;
-            end
-        end
-        q = Q*eig_vecs(:,l);
-    elseif strcmpi(strategy,'closest_conv')
-        % Generate new starting vector from the non-converged basis vector that is
-        % closest to convergence
-        min_norm = inf;
-        ix = k+1;
-        for i = k+2:m
-            if ritz_norms(i) < min_norm
-                min_norm = ritz_norms(i);
-                ix = i;
-            end
-        end
-        q = Q*eig_vecs(:,ix);
-    elseif strcmpi(strategy,'random')
-        % Generate new starting vector from a random choice of the non-converged ones.
-        ix = (k+1) + round(rand(1)*(m-k-1));
-        q = Q*eig_vecs(:,ix);
+    [Vk,Dk] = eig(Tm(1:k,1:k));
+    conv_eigs = sort(diag(Dk),'descend');
+    Q_conv = zeros(n,k);
+    for i = 1:k
+        Q_conv(:,i) = Qm(:,1:k)*Vk(:,i);
     end
     
-    % Normalize the new vector
-    q = q/norm(q);
-end
-
-function restart = check_wanted_eigs(conv_eigs, eigs, num_wanted_eigs)
-    if isempty(eigs)
-        % Quick exit, no new eigs
-        restart = true;
-    else
-%        max_eig = max(eigs);
-%        largest_conv_eigs = find(conv_eigs > max_eig);
-%        if length(largest_conv_eigs) >= num_wanted_eigs
-%            restart = false;
-%        else
-%            restart = true;
-%        end
-        if length(conv_eigs) >= num_wanted_eigs
-            restart = false;
-        else
-            restart = true;
-        end
+    if ~restart
+        disp(['Converged in ' num2str(num_restarts) ' restarts.']);
+    else       
+        disp(['Did not converge.']);
     end
 end
 
@@ -409,24 +282,16 @@ function [Q,T] = lanczos_basic(A, Vk, q, Bk, maxiter, s, basis, orth)
     Q = Q(:,1:s*(iter-1)+k+1);
 end
 
-function T_new = deflate(y,T)
-    k = length(y);
-    Q = zeros(k,k);
-    Q(:,1) = y;
-    s = y(1)^2;
-    t0 = abs(y(1));
-    for j = 2:k
-        s = s + y(j)^2;
-        t = sqrt(s);
-        if t0 ~= 0
-            g = (y(j)/t)/t0;
-            Q(1:j-1,j) = -y(1:j-1)*g;
-            Q(j,j) = t0/t;
-        else
-            Q(j-1,j) = 1;
-        end
-        t0 = t;
-    end
-    T_new = Q'*T*Q;
+function [V,H] = deflate(V, H, X, j) 
+    m = size(H,2);
+    i = size(X,2);
+    [Q,R] = qr(X);
+    H(j+1:m,j+1:m) = Q'*H(j+1:m,j+1:m)*Q;
+    H(1:j,j+1:m) = H(1:j,j+1:m)*Q;
+    V(:,j+1:m+1) = V(:,j+1:m+1)*Q;
+    [P,S] = qr(H(1+j+i:m,1+j+i:m)); %% Not sure about this (step 3 in alg 6.2)
+    H(1+j+i:m,1+j+i:m) = P'*H(1+j+i:m,1+j+i:m)*P;
+    H(1:j+i,1+j+i:m) = H(1:j+i,1+j+i:m)*P;
+    V(:,1+j+i:m+1) = V(:,1+j+i:m+1)*P;   
 end
 
