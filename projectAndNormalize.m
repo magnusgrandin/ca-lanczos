@@ -59,7 +59,7 @@ function [QZ,RZ] = projectAndNormalize(Q,X,doreorth)
         else
             disp('second');
             [Z,RZ] = project(Q,Y,false); 
-            [QZ,R_,rank] = normalize(Z,'randomizeNullSpace');
+            [QZ,R_,rank] = normalize(Z);%,'randomizeNullSpace');
             RZ{numBlocksQ+1} = R_;
             % Update coefficients after second pass of orthogonalization
 %            RZ = RZ+RY;
@@ -76,9 +76,9 @@ function [QZ,RZ] = projectAndNormalize(Q,X,doreorth)
             % keep the coefficients.
             if rank < ncols
                 disp('Rank deficient');
-                nullSpaceCols = rank+1:ncols;
-                [QZ(:,nullSpaceCols),R_] = project(Q,QZ(:,nullSpaceCols),false);
-                [QZ(:,nullSpaceCols),R_] = tsqr(QZ(:,nullSpaceCols));
+%                 nullSpaceCols = rank+1:ncols;
+%                 [QZ(:,nullSpaceCols),R_] = project(Q,QZ(:,nullSpaceCols),false);
+%                 [QZ(:,nullSpaceCols),R_] = tsqr(QZ(:,nullSpaceCols));
             end
         end
     else
