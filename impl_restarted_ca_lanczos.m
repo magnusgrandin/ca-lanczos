@@ -31,10 +31,9 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
     if nargin < 8 || isempty(tol)
         tol = 1.0e-06;
     end
-    
     % Adjust the tolerance according to the norm of A.
-    %norm_A = normest(A);
-    %tol = tol*norm_A;
+    norm_A = normest(A);
+    tol = tol*norm_A;
 
     if strcmpi(orth,'local')
         disp('Local orthogonalization');
@@ -94,9 +93,26 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
                
         num_restarts = num_restarts+1;
               
-        [Vm,Dm] = eig(Tm(1:m,1:m));
+        [Vm,Dm] = eig(Tm(nconv+1:m,nconv+1:m));
         eigsSorted = sort(diag(Dm),'descend'); % TODO: This only covers the case of the largest eigenvalues
-        
+     
+        beta = Tm(m+1,m);
+        x = [];
+        new_conv = 0;
+        for i = nconv+1:k
+            y = Vm(:,i);
+            y(m-nconv)
+            if abs(beta*y(m-nconv)) < tol
+               x = y;
+               nconv = nconv + 1;
+               break;
+            end
+        end
+        Tm = deflate(x,Tm);
+        if nconv >= k
+            restart = false;
+            break;
+        end
         
         % Check stopping criteria
 %         hasConverged = true;
@@ -115,30 +131,31 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
 %             break;
 %         end
 
-        beta = Tm(k+1,k);
-        if abs(beta*Vm(m,k)) < tol
-            restart = false;
-            disp('Converged.');
-            break;
-        end
+%         beta = Tm(k+1,k);
+%         if abs(beta*Vm(m,k)) < tol
+%             restart = false;
+%             disp('Converged.');
+%             break;
+%         end
 
-        u = eigsSorted(k+1:k+p);
+        u = eigsSorted(k-nconv+1:k-nconv+p);
 
         %%%%%%%%%%%%%
-        I = eye(m);
+        I = eye(m-nconv);
         for j = 1:p
-            [Qj,Rj] = qr(Tm(1:m,1:m)-u(j)*I);
-            Qm(:,1:m) = Qm(:,1:m)*Qj;
-            Tm(1:m,1:m) = Qj'*Tm(1:m,1:m)*Qj;
-            Tm(m+1,:) = Tm(m+1,:)*Qj;
+            [Qj,Rj] = qr(Tm(nconv+1:m,nconv+1:m)-u(j)*I);
+            Qm(:,nconv+1:m) = Qm(:,nconv+1:m)*Qj;
+            Tm(nconv+1:m,nconv+1:m) = Qj'*Tm(nconv+1:m,nconv+1:m)*Qj;
+%            Tm(nconv+1:m,nconv+1:m) = Rj*Qj'+ u*I;
         end
         %%%%%%%%%%%%%
         
         b = Tm(k+1,k);
         Vk(:,1:k) = Qm(:,1:k);
-        rk = Qm(:,m+1);
-        Tk = [Tm(1:k,1:k); zeros(1,k-1), b];
+        rk = b*Qm(:,k+1) + Qj(m-nconv,k);
+        Tk = Tm(1:k,1:k);%; zeros(1,k-1), b];
                       
+        b_ = sqrt(rk'*rk);
         % Complete the m-step Lanczos factorization by applying p more steps
         if strcmpi(orth,'local')
             [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p/s), s, basis, 'local');
@@ -148,7 +165,7 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
             % Do nothing
         end
         
-        Tm = [Tk(1:k,1:k), b*eyeshvec(k)*eye(p,1)'; b*eye(p,1)*eyeshvec(k)', Tp(1:p,1:p); Tp(p+1,p)*eyeshvec(k+p)'];
+        Tm = [Tk(1:k,1:k), b_*eyeshvec(k)*eye(p,1)'; b_*eye(p,1)*eyeshvec(k)', Tp(1:p,1:p); Tp(p+1,p)*eyeshvec(k+p)'];
         Qm = Qp;
 
         % For deflation:
@@ -162,6 +179,8 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
         %    existing locked Ritz values, the iteration is stopped.
         %
 
+        eig(Tm(1:k,1:k))
+        
     end
 
     [Vk,Dk] = eig(Tm(1:k,1:k));
@@ -282,16 +301,102 @@ function [Q,T] = lanczos_basic(A, Vk, q, Bk, maxiter, s, basis, orth)
     Q = Q(:,1:s*(iter-1)+k+1);
 end
 
-function [V,H] = deflate(V, H, X, j) 
-    m = size(H,2);
-    i = size(X,2);
-    [Q,R] = qr(X);
-    H(j+1:m,j+1:m) = Q'*H(j+1:m,j+1:m)*Q;
-    H(1:j,j+1:m) = H(1:j,j+1:m)*Q;
-    V(:,j+1:m+1) = V(:,j+1:m+1)*Q;
-    [P,S] = qr(H(1+j+i:m,1+j+i:m)); %% Not sure about this (step 3 in alg 6.2)
-    H(1+j+i:m,1+j+i:m) = P'*H(1+j+i:m,1+j+i:m)*P;
-    H(1:j+i,1+j+i:m) = H(1:j+i,1+j+i:m)*P;
-    V(:,1+j+i:m+1) = V(:,1+j+i:m+1)*P;   
+function T_new = deflate(y,T)
+    T_new = T;
+    if isempty(y)
+        return;
+    else
+        k = size(y,1);
+        Q = zeros(k,k);
+        Q(:,1) = y;
+        s = y(1)^2;
+        t0 = abs(y(1));
+        for j = 2:k
+            s = s + y(j)^2;
+            t = sqrt(s);
+            if t0 ~= 0
+                g = (y(j)/t)/t0;
+                Q(1:j-1,j) = -y(1:j-1)*g;
+                Q(j,j) = t0/t;
+            else
+                Q(j-1,j) = 1;
+            end
+            t0 = t;
+        end
+        T_new(1:k,1:k) = Q'*T(1:k,1:k)*Q;
+    end
 end
 
+% function [V,H] = deflate(V, H, X, j)
+%     
+%     % Quick exit if there are no Ritz-pairs to deflate.
+%     if isempty(X)
+%         return;
+%     end
+%     
+%     m = size(H,2);
+%     i = size(X,2);
+%     [Q,R] = qr(X);
+%     H(j+1:m,j+1:m) = Q'*H(j+1:m,j+1:m)*Q;
+%     H(1:j,j+1:m) = H(1:j,j+1:m)*Q;
+%     V(:,j+1:m) = V(:,j+1:m)*Q;
+%     [P,S] = qr(H(1+j+i:m,1+j+i:m)); %% Not sure about this (step 3 in alg 6.2)
+%     %[H(1+j+i:m,1+j+i:m),P] = Hessred(H(1+j+i:m,1+j+i:m));
+%     H(1+j+i:m,1+j+i:m) = P'*H(1+j+i:m,1+j+i:m)*P;
+%     H(1:j+i,1+j+i:m) = H(1:j+i,1+j+i:m)*P;
+%     V(:,1+j+i:m) = V(:,1+j+i:m)*P;   
+% end
+
+
+function [A, P] = Hessred(A)
+% Reduction of the square matrix A to the upper
+% Hessenberg form using Householder reflectors.
+% The reflection vectors are stored in columns of
+% the matrix V. Matrix A is overwritten with its
+% upper Hessenberg form.
+[m,n] =size(A);
+if A == triu(A,-1)
+   V = eye(m);
+   return
+end
+V = [];
+for k=1:m-2
+   x = A(k+1:m,k);
+   v = Housv(x);
+   A(k+1:m,k:m) = A(k+1:m,k:m) - 2*v*(v'*A(k+1:m,k:m));
+   A(1:m,k+1:m) = A(1:m,k+1:m) - 2*(A(1:m,k+1:m)*v)*v';
+   v = [zeros(k,1);v];
+   V = [V v];
+end
+P = eye(m)-2*V*V';
+end
+
+function u = Housv(x)
+% Householder reflection unit vector u from the vector x.
+m = max(abs(x));
+u = x/m;
+if  u(1) == 0
+   su = 1;
+else
+   su = sign(u(1));
+end
+u(1) = u(1)+su*norm(u);
+u = u/norm(u);
+u = u(:);
+end
+% function getLejaPoints(a,b,theta_k,theta_p,z_in)
+%     p = length(z_in);
+%     z = [z_in; zeros(p,1)];
+%     a = min(a,theta_k);
+%     b = max(b,theta_k);
+%     k = p;
+%     while k < 2*p
+%         if k == 0
+%             z0 = b;
+%         else
+%             w = abs(z(k)-theta_k);
+%             for i = 0 
+%         end
+%         k = k+1;
+%     end
+% end
