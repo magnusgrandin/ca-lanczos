@@ -1,8 +1,9 @@
 function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
 
+    %% Define constants.
     max_restarts = 40;
 
-    % Check input arguments
+    %% Check input arguments.
     if nargin < 3
         disp('ERROR: Wrong number of input arguments.')
     end
@@ -28,10 +29,11 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
             return;
         end
     end
+    
+    %% Set the tolerance, adjust according to the norm of A.
     if nargin < 8 || isempty(tol)
         tol = 1.0e-06;
     end
-    % Adjust the tolerance according to the norm of A.
     norm_A = normest(A);
     tol = tol*norm_A;
 
@@ -41,15 +43,159 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
         disp('Full orthogonalization');
     end
 
+    % TODO: Take this as input argument.
     restart_strategy = 'largest'; % 'largest','smallest','closest_conv','random'
 
     % Vector length
     n = length(r);
         
     % Normalize the initial vector.
-    q = r/norm(r);
+    Vm(:,1) = r/norm(r);
+    q = [];
     
     % Fix change-of-basis matrix
+    Bk = setChangeOfBasisMatrix(A,Vm(:,1),basis,s);
+
+    Vk = zeros(n,n_wanted_eigs);
+    Tm = zeros(max_lanczos+1,max_lanczos);
+    conv_eigs = [];
+    conv_rnorms = [];
+    orth_err = [];
+
+    if mod(n_wanted_eigs,s) ~= 0
+        % TODO: Fix!!
+        disp('Warning: Number of wanted eigs is not a multiple of s.');
+        return;
+    end
+    
+    k = n_wanted_eigs+4;
+    p = s*floor((max_lanczos-k)/s);
+    m = k+p;
+       
+    iter = 0;
+    restart = true;
+    nconv = 0;
+    while(restart && (iter < max_restarts))
+        
+        iter = iter+1;
+    
+        if iter == 1
+            [Vm,Tm] = lanczos_basic(A,Vm,Tm,q,Bk,m,0,s,basis,orth);            
+            %[Vm,Tm] = std_lanczos_basic(A,[],Tm,q,m,0,orth);            
+        else
+            [Vm,Tm] = lanczos_basic(A,Vm,Tm,q,Bk,m,k,s,basis,orth);
+            %[Vm,Tm] = std_lanczos_basic(A,Vm,Tm,q,m,k,orth);
+        end
+        
+        u = selectShifts(Tm(1:m,1:m),restart_strategy);
+
+        Q = eye(m);
+        j = m;
+        while(j > k)
+            [Q,Tm(1:m,1:m)] = qrstep(Q,Tm(1:m,1:m),u(j),1,m);
+            if(abs(imag(mu(j))) > 0)
+                j = j-2;
+            else
+                j = j-1;
+            end
+        end
+        
+        r = Vm(:,1:m)*Q(:,j+1)*Tm(j+1,j) + r*Q(m,j);
+        Vm(:,1:j) = Vm(:,1:m)*Q(:,1:j);
+        bk = sqrt(r'*r);
+        Vm(:,j+1) = (1/bk)*r;
+        Tm(j+1,j) = bk;
+
+        % TODO: deflation.
+        % 1. Initially, lock Ritz values as they converge until k values have been locked
+        % 2. Continue to iterate, lock every new Ritz value that is better than any of 
+        %    the already locked ones. Purge all unwanted but yet converged Ritz values.
+        % 3. Continue with (2) until the next Ritz value to converge is not better. Replace 
+        %    the (k+1)st basis vector with a random vector and orthogonalize it against the 
+        %    previous ones (the k locked ones?). Go back to step (2)
+        % 4. When step (3) has been executed two consecutive times with no replacement of 
+        %    existing locked Ritz values, the iteration is stopped.
+        %
+        
+        e=eig(Tm(1:k,1:k))
+        
+    end
+    
+      
+    %         beta = norm(r);
+%         x = [];
+%         new_conv = 0;
+%         for i = nconv+1:k
+%             y = Vm(:,i);
+%             y(m-nconv)
+%             if abs(beta*y(m-nconv)) < tol
+%                x = y;
+%                nconv = nconv + 1;
+%                break;
+%             end
+%         end
+%         Tm = deflate(x,Tm);
+%         if nconv >= k
+%             restart = false;
+%             break;
+%         end
+        
+%         %%%%%%%%%%%%%
+%         I = eye(m-nconv);
+%         for j = 1:p
+%             [Qj,Rj] = qr(Tm(nconv+1:m,nconv+1:m)-u(j)*I);
+%             Vm(:,nconv+1:m) = Vm(:,nconv+1:m)*Qj;
+%             Tm(nconv+1:m,nconv+1:m) = Qj'*Tm(nconv+1:m,nconv+1:m)*Qj;
+% %            Tm(nconv+1:m,nconv+1:m) = Rj*Qj'+ u*I;
+%         end
+%         %%%%%%%%%%%%%
+
+
+%       [V,H,f] = Arnold(A,V,H,f,ko,m);
+% 
+%       [mu, ritz]= select_shifts(H,which);
+% 
+%       Q = eye(m);
+%       j = m;
+%       while(j > k)
+% %
+% %            Apply unwanted eigenvalues as shifts with QR steps
+% %
+%             [Q,H] = qrstep(Q,H,mu(j),1,m);
+% %
+% %            Decrease j by 2 if m_j imaginary and by 1 if real
+% %
+%             if (abs(imag(mu(j))) > 0),
+%                j = j-2;
+%             else
+%                j = j-1;
+%             end
+%       end
+%       ko = j;
+
+%      ritz = norm(f)*ritz(1:ksave);
+%      f = V*Q(:,ko+1)*H(ko+1,ko) + f*Q(m,ko);
+%      V(:,1:ko) = V*Q(:,1:ko);
+
+
+
+
+    [Vk,Dk] = eig(Tm(1:k,1:k));
+    conv_eigs = sort(diag(Dk),'descend');
+    Q_conv = zeros(n,k);
+    for i = 1:k
+        Q_conv(:,i) = Vm(:,1:k)*Vk(:,i);
+    end
+    
+    if ~restart
+        disp(['Converged in ' num2str(num_restarts) ' restarts.']);
+    else       
+        disp(['Did not converge.']);
+    end
+end
+
+% Fix the change of basis matrix.
+function Bk = setChangeOfBasisMatrix(A,q,basis,s)
     Bk = [];
     if strcmpi(basis,'monomial')
         I = eye(s+1);
@@ -61,139 +207,15 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
         basis_shifts = leja(basis_eigs,'nonmodified');
         Bk = newton_basis_matrix(basis_shifts, s,1);
     end
+end
 
-    Vk = zeros(n,n_wanted_eigs);
-    conv_eigs = [];
-    conv_rnorms = [];
-    orth_err = [];
-
-    if mod(n_wanted_eigs,s) ~= 0
-        % TODO: Fix!!
-        disp('Warning: Number of wanted eigs is not a multiple of s.');
-        return;
-    end
-    
-    k = n_wanted_eigs;
-    p = s*floor((max_lanczos-k)/s);
-    m = k+p;
-    
-    % Compute initial m-step Lanczos factorization
-    if strcmpi(orth,'local')
-        [Qm,Tm] = lanczos_basic(A, [], q, Bk, floor(m/s), s, basis, 'local');
-    elseif strcmpi(orth,'full')
-        [Qm,Tm] = lanczos_basic(A, [], q, Bk, floor(m/s), s, basis, 'fro');
-    else
-        % Do nothing
-    end  
-    
-    num_restarts = 0;
-    restart = true;
-    nconv = 0;
-    while(restart && (num_restarts < max_restarts))
-               
-        num_restarts = num_restarts+1;
-              
-        [Vm,Dm] = eig(Tm(nconv+1:m,nconv+1:m));
-        eigsSorted = sort(diag(Dm),'descend'); % TODO: This only covers the case of the largest eigenvalues
-     
-        beta = Tm(m+1,m);
-        x = [];
-        new_conv = 0;
-        for i = nconv+1:k
-            y = Vm(:,i);
-            y(m-nconv)
-            if abs(beta*y(m-nconv)) < tol
-               x = y;
-               nconv = nconv + 1;
-               break;
-            end
-        end
-        Tm = deflate(x,Tm);
-        if nconv >= k
-            restart = false;
-            break;
-        end
-        
-        % Check stopping criteria
-%         hasConverged = true;
-%         beta = Tm(m+1,m);
-%         for i = 1:m
-%             d = Dm(i,i);
-%             y = Vm(:,i);
-%             if abs(beta*y(m))/abs(d) > tol
-%                 hasConverged = false;
-%                 break;
-%             end
-%         end
-%         if hasConverged
-%             restart = false;
-%             disp('Converged.');
-%             break;
-%         end
-
-%         beta = Tm(k+1,k);
-%         if abs(beta*Vm(m,k)) < tol
-%             restart = false;
-%             disp('Converged.');
-%             break;
-%         end
-
-        u = eigsSorted(k-nconv+1:k-nconv+p);
-
-        %%%%%%%%%%%%%
-        I = eye(m-nconv);
-        for j = 1:p
-            [Qj,Rj] = qr(Tm(nconv+1:m,nconv+1:m)-u(j)*I);
-            Qm(:,nconv+1:m) = Qm(:,nconv+1:m)*Qj;
-            Tm(nconv+1:m,nconv+1:m) = Qj'*Tm(nconv+1:m,nconv+1:m)*Qj;
-%            Tm(nconv+1:m,nconv+1:m) = Rj*Qj'+ u*I;
-        end
-        %%%%%%%%%%%%%
-        
-        b = Tm(k+1,k);
-        Vk(:,1:k) = Qm(:,1:k);
-        rk = b*Qm(:,k+1) + Qj(m-nconv,k);
-        Tk = Tm(1:k,1:k);%; zeros(1,k-1), b];
-                      
-        b_ = sqrt(rk'*rk);
-        % Complete the m-step Lanczos factorization by applying p more steps
-        if strcmpi(orth,'local')
-            [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p/s), s, basis, 'local');
-        elseif strcmpi(orth,'full')
-            [Qp,Tp] = lanczos_basic(A, Vk, rk, Bk, floor(p/s), s, basis, 'fro');
-        else
-            % Do nothing
-        end
-        
-        Tm = [Tk(1:k,1:k), b_*eyeshvec(k)*eye(p,1)'; b_*eye(p,1)*eyeshvec(k)', Tp(1:p,1:p); Tp(p+1,p)*eyeshvec(k+p)'];
-        Qm = Qp;
-
-        % For deflation:
-        % 1. Initially, lock Ritz values as they converge until k values have been locked
-        % 2. Continue to iterate, lock every new Ritz value that is better than any of 
-        %    the already locked ones. Purge all unwanted but yet converged Ritz values.
-        % 3. Continue with (2) until the next Ritz value to converge is not better. Replace 
-        %    the (k+1)st basis vector with a random vector and orthogonalize it against the 
-        %    previous ones (the k locked ones?). Go back to step (2)
-        % 4. When step (3) has been executed two consecutive times with no replacement of 
-        %    existing locked Ritz values, the iteration is stopped.
-        %
-
-        eig(Tm(1:k,1:k))
-        
-    end
-
-    [Vk,Dk] = eig(Tm(1:k,1:k));
-    conv_eigs = sort(diag(Dk),'descend');
-    Q_conv = zeros(n,k);
-    for i = 1:k
-        Q_conv(:,i) = Qm(:,1:k)*Vk(:,i);
-    end
-    
-    if ~restart
-        disp(['Converged in ' num2str(num_restarts) ' restarts.']);
-    else       
-        disp(['Did not converge.']);
+% Select the shifts used in the QR step.
+function mu = selectShifts(T,which)
+    [V,D] = eig(T);
+    if strcmpi(which,'largest')
+        mu = sort(abs(diag(D)),'descend');
+    elseif strcmpi(which,'smallest')
+        mu = sort(abs(diag(D)),'ascend');
     end
 end
 
@@ -215,57 +237,125 @@ function vec = eyeshvec(len)
     vec=circshift(vec,len-1);
 end
  
-function [Q,T] = lanczos_basic(A, Vk, q, Bk, maxiter, s, basis, orth)
+function [Q,T] = std_lanczos_basic(A,Q,T,q,maxvecs,prevvecs,orth)
 
-    if nargin < 7
+    if nargin < 4
         orth = 'local';
     end
-  
-    n = length(q);
-    Q = zeros(n,maxiter*s);
-    k = 0;
-    if isempty(Vk)
-        Q(:,1) = q;
-    else
-        k = size(Vk,2);
-        Q(:,1:k) = Vk;
-        Q(:,k+1) = q;
+    
+    n = size(Q,1);
+    
+    % If necessary, allocate enough space in Q and T
+    if size(Q,2) < maxvecs+1
+        Q = [Q, zeros(n,maxvecs+1-size(Q,2))];
     end
-    b = zeros(maxiter+1,1);
-    T = [];
+    [Trows,Tcols] = size(T);
+    if Trows < maxvecs+1 || Tcols < maxvecs
+        T_ = T;
+        T = zeros(maxvecs+1,maxvecs);
+        T(1:Trows,1:Tcols) = T_;
+    end
+    
+    if prevvecs > 0
+        b = sqrt(Q(:,prevvecs+1)'*Q(:,prevvecs+1));
+    else
+        b = T(Trows,Tcols);
+    end
+    alpha = zeros(1,maxvecs);
+    beta = zeros(1,maxvecs);
+    
+    nvecs = prevvecs+1;
+    iter = 0;
+    while (nvecs < maxvecs+1) 
+        iter = iter+1;
+        r = A*Q(:,nvecs);
+        if iter > 1
+            r=r-beta(iter-1)*Q(:,nvecs-1);
+        end
+        alpha(iter) = r'*Q(:,nvecs);
+        r = r - alpha(iter)*Q(:,nvecs);
+        beta(iter) = sqrt(r'*r);
+        Q(:,nvecs+1) = r/beta(iter);
+        if strcmpi(orth,'full') == 1
+            [Q,R_] = normalize(Q);
+        end
+        nvecs = nvecs + 1;
+    end
+    Tk = diag(alpha(1:iter)) + diag(beta(1:iter-1),1) + diag(beta(1:iter-1),-1);
+    Tk = [Tk; zeros(1,iter-1),beta(iter)];
+    
+    % Fix output
+    if prevvecs > 0
+        T11 = T(1:prevvecs,1:prevvecs);
+        T12 = b*eyeshvec(prevvecs)*eye(nvecs-prevvecs-1,1)';
+        T21 = b*eye(nvecs-prevvecs,1)*eyeshvec(prevvecs)';
+        T22 = Tk;
+        T = [T11,T12;T21,T22];
+    else
+        T = Tk;
+    end
+    Q = Q(:,1:nvecs);
+end
+
+function [Q,T] = lanczos_basic(A, Q, T, q, Bk, maxvecs, prevvecs, s, basis, orth)
+
+    if nargin < 8
+        orth = 'local';
+    end
+     
+    n = size(Q,1);
+       
+    % If necessary, allocate enough space in Q and T
+    if size(Q,2) < maxvecs+1
+        Q = [Q, zeros(n,maxvecs+1-size(Q,2))];
+    end
+    [Trows,Tcols] = size(T);
+    if Trows < maxvecs+1 || Tcols < maxvecs
+        T_ = T;
+        T = zeros(maxvecs+1,maxvecs);
+        T(1:Trows,1:Tcols) = T_;
+    end
+    
+    b = zeros(ceil((maxvecs+1)/s),1);
+    if prevvecs > 0
+        b(1) = sqrt(Q(:,prevvecs+1)'*Q(:,prevvecs+1));
+    else
+        b(1) = T(Trows,Tcols);
+    end
     
     iter = 0;
-    while iter <= maxiter
+    nvecs = prevvecs;
+    while nvecs <= maxvecs-s
 
         iter = iter+1;
-
-        if iter > 1
-            q = Q(:,(iter-1)*s+1+k);
-        end
+        
+        q = Q(:,nvecs+1);
         
         V = matrix_powers(A,q,s,Bk,basis);
         
-        if iter == 1
+        if nvecs == 0
             % Orthogonalize initial basis vectors
-            [Q(:,1+k:s+1+k),Rk] = normalize(V(:,1:s+1));
+            [Q(:,nvecs+1:nvecs+s+1),Rk] = normalize(V(:,1:s+1));
             % Compute first part of tridiagonal matrix
-            T = Rk*Bk/Rk(1:s,1:s);
+            Tk = Rk*Bk/Rk(1:s,1:s);
             % Compute next beta
-            b(iter) = T(s+1,s);
+            b(iter+1) = Tk(s+1,s);
+            % Extend T
+            T(nvecs+1:nvecs+s+1,nvecs+1:nvecs+s) = Tk;
             
         else
             if strcmpi(orth,'local')
                 % Orthogonalize against previous block of basis vectors
-                [Q_,Rk_] = projectAndNormalize({Q(:,(iter-2)*s+1:(iter-1)*s+1)},V(:,2:s+1),true);
-                Q(:,(iter-1)*s+2+k:iter*s+1+k) = Q_(:,1:s);
+                [Q_,Rk_] = projectAndNormalize({Q(:,nvecs-s+1:nvecs+1)},V(:,2:s+1),false);
                 Rkk_s = Rk_{1};
-                Rk_s = Rk_{3};
-            elseif strcmpi(orth,'fro')
+                Rk_s = Rk_{3}; 
+                Q(:,nvecs+2:nvecs+s+1) = Q_;
+            elseif strcmpi(orth,'full')
                 % Orthogonality against all previous basis vectors
-                [Q_,Rk_] = projectAndNormalize({Q(:,1:(iter-2)*s+k),Q(:,(iter-2)*s+1+k:(iter-1)*s+1+k)},V(:,2:s+1),true);
+                [Q_,Rk_] = projectAndNormalize({Q(:,1:nvecs-s),Q(:,nvecs-s+1:nvecs+1)},V(:,2:s+1),false);
                 Rkk_s = Rk_{2};
                 Rk_s = Rk_{3};
-                Q(:,(iter-1)*s+2+k:iter*s+1+k) = Q_;
+                Q(:,nvecs+2:nvecs+s+1) = Q_;
             end
             
             % Compute Tk (tridiagonal sub-matrix of T)
@@ -279,26 +369,27 @@ function [Q,T] = lanczos_basic(A, Vk, q, Bk, maxiter, s, basis, orth)
             es = eyeshvec(s);
             Tk = Rk(1:s,1:s)*Bk(1:s,:)/Rk(1:s,1:s) ...
                 + (bk/rho_t)*zk*es' ...
-                - b(iter-1)*e1*es'*Rkk(1:s,1:s)/Rk(1:s,1:s);
+                - b(iter)*e1*es'*Rkk(1:s,1:s)/Rk(1:s,1:s);
 
             % Compute the next beta
-            b(iter) = bk*(rho/rho_t);
+            b(iter+1) = bk*(rho/rho_t);
             
             % Extend T
-            T11 = T(1:s*(iter-1),1:s*(iter-1));
-            T12 = b(iter-1)*eyeshvec(s*(iter-1))*eye(s,1)';
-            T21 = b(iter-1)*eye(s,1)*eyeshvec(s*(iter-1))';
-            T22 = Tk;
-            T31 = zeros(1,s*(iter-1));
-            T32 = b(iter)*eyeshvec(s)';
+            T11 = T(1:nvecs,1:nvecs);
+            T12 = b(iter)*eyeshvec(nvecs)*eye(s,1)';
+            T21 = b(iter)*eye(s,1)*eyeshvec(nvecs)';
+            T22 = Tk(1:s,1:s);
+            T31 = zeros(1,nvecs);
+            T32 = b(iter+1)*eyeshvec(s)';
             T = [T11, T12; T21, T22; T31, T32];
- 
         end
+        
+        nvecs = nvecs+s;        
     end
     
     % Fix output
-    T = T(1:s*(iter-1)+1,1:s*(iter-1));
-    Q = Q(:,1:s*(iter-1)+k+1);
+    T = T(1:nvecs,1:nvecs);
+    Q = Q(:,1:nvecs+1);
 end
 
 function T_new = deflate(y,T)
@@ -400,3 +491,60 @@ end
 %         k = k+1;
 %     end
 % end
+
+function [V,H] = qrstep(V,H,mu,k1,k2)
+%
+%   Input: V     -- a real square orthogonal matrix
+%
+%          H     -- a real square upper Hessenberg matrix
+%
+%          mu    -- a real  or complex shift
+%
+%          k1,k2 -- pointers to submatrix in k1:k2 block
+%
+%   Output: V    -- a real orthogonal matrix  
+%
+%           H    -- a real square upper Hessenberg matrix
+%
+%                   V <- VQ;   H <- Q'HQ;
+%
+%                   Q corresponds to a single real shift or 
+%                     a double complex shift depending on mu
+%
+%   D.C. Sorensen
+%   2 Mar 2000
+%
+   k = k2-k1+1;
+   kr = k1:k2;
+   [m,m] = size(H);
+
+   eta = imag(mu);
+
+   if (abs(eta) > 0), 
+%                      mu is imaginary -- apply double shift
+%
+      xi = real(mu);
+      [Q,R] = qr((H(kr,kr) - xi*eye(k))^2 + eta^2*eye(k));
+
+   else  
+%                      mu is real -- apply single shift
+%
+      [Q,R] = qr(H(kr,kr) - mu*eye(k));
+
+   end
+
+   H(kr,:) = Q'*H(kr,:);
+   H(:,kr) = H(:,kr)*Q;
+   V(:,kr) = V(:,kr)*Q;
+
+%
+%   clean up rounding error noise below first subdiagonal
+%
+   for j = k1:k2,
+       H(j+2:m,j) = H(j+2:m,j)*0; 
+   end
+% Implicitly restarted Arnoldi
+% Takes away one single eigenvalue or 
+% a complex cojugate pair of eigenvalues
+% 
+end
