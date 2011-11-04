@@ -80,11 +80,13 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
         iter = iter+1;
     
         if iter == 1
-            [Vm,Tm] = lanczos_basic(A,Vm,Tm,q,Bk,m,0,s,basis,orth);            
-            %[Vm,Tm] = std_lanczos_basic(A,[],Tm,q,m,0,orth);            
+            %[Vm,Tm] = lanczos_basic(A,Vm,Tm,q,Bk,m,0,s,basis,orth);            
+            [Vm,Tm] = std_lanczos_basic(A,Vm,Tm,q,m,0,orth);            
+            %[Vm,Tm] = arnoldi(A,Vm,Tm,q,m,0,orth);            
         else
-            [Vm,Tm] = lanczos_basic(A,Vm,Tm,q,Bk,m,k,s,basis,orth);
-            %[Vm,Tm] = std_lanczos_basic(A,Vm,Tm,q,m,k,orth);
+            %[Vm,Tm] = lanczos_basic(A,Vm,Tm,q,Bk,m,k,s,basis,orth);
+            [Vm,Tm] = std_lanczos_basic(A,Vm,Tm,q,m,k,orth);
+            %[Vm,Tm] = arnoldi(A,Vm,Tm,q,m,k,orth);
         end
         
         u = selectShifts(Tm(1:m,1:m),restart_strategy);
@@ -92,7 +94,7 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
         Q = eye(m);
         j = m;
         while(j > k)
-            [Q,Tm(1:m,1:m)] = qrstep(Q,Tm(1:m,1:m),u(j),1,m);
+            [Q,Tm] = qrstep(Q,Tm,u(j),nconv+1,m);
             if(abs(imag(mu(j))) > 0)
                 j = j-2;
             else
@@ -100,8 +102,8 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
             end
         end
         
-        r = Vm(:,1:m)*Q(:,j+1)*Tm(j+1,j) + r*Q(m,j);
-        Vm(:,1:j) = Vm(:,1:m)*Q(:,1:j);
+        r = Vm(:,nconv+1:m)*Q(nconv+1:m,j+1)*Tm(j+1,j) + r*Q(m,j);
+        Vm(:,nconv+1:j) = Vm(:,nconv+1:m)*Q(nconv+1:m,nconv+1:j);
         bk = sqrt(r'*r);
         Vm(:,j+1) = (1/bk)*r;
         Tm(j+1,j) = bk;
@@ -116,13 +118,39 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
         % 4. When step (3) has been executed two consecutive times with no replacement of 
         %    existing locked Ritz values, the iteration is stopped.
         %
-        
-        e=eig(Tm(1:k,1:k))
-        
+    
+        %[V,D] = eig(Tm(nconv+1:m,nconv+1:m));
+        [V,D] = eig(Tm(nconv+1:k,nconv+1:k));
+               
+        % Find converged ritz pairs.
+        Y = [];
+        j = 0;
+        bk = sqrt(Q(:,k+1)'*Q(:,k+1));
+        for i = nconv+1:k
+            y = V(:,i);
+%            if abs(bk*y(m-nconv)) < tol
+            if abs(bk*y(k-nconv)) < tol
+                %abs(bk*y(m-nconv))
+                abs(bk*y(k-nconv))
+                i
+                D(i,i)
+                bk
+                Y = [Y,y];
+                j = j+1;
+                break;
+            end
+        end
+        if j > 0
+            disp('Deflate.');
+            [Vm,Tm] = deflate(Vm,Tm,Y,nconv);
+            nconv = nconv+j;
+        end
+        if nconv >= n_wanted_eigs
+            restart = false;
+        end
     end
     
-      
-    %         beta = norm(r);
+%         beta = norm(r);
 %         x = [];
 %         new_conv = 0;
 %         for i = nconv+1:k
@@ -392,30 +420,90 @@ function [Q,T] = lanczos_basic(A, Q, T, q, Bk, maxvecs, prevvecs, s, basis, orth
     Q = Q(:,1:nvecs+1);
 end
 
-function T_new = deflate(y,T)
-    T_new = T;
-    if isempty(y)
-        return;
-    else
-        k = size(y,1);
-        Q = zeros(k,k);
-        Q(:,1) = y;
-        s = y(1)^2;
-        t0 = abs(y(1));
-        for j = 2:k
-            s = s + y(j)^2;
-            t = sqrt(s);
-            if t0 ~= 0
-                g = (y(j)/t)/t0;
-                Q(1:j-1,j) = -y(1:j-1)*g;
-                Q(j,j) = t0/t;
-            else
-                Q(j-1,j) = 1;
-            end
-            t0 = t;
+% function [V,T] = deflate(V,T,Y,j)
+%     
+%     m = size(T,2);
+%     i = size(Y,2);
+%     
+% %    [Q,R] = qr(Y);
+%     [Q,R] = householder_qr(Y);    
+%     T(j+1:m,j+1:m) = Q'*T(j+1:m,j+1:m)*Q;
+%     V(:,j+1:m) = V(:,j+1:m)*Q;
+%     T(1:j,j+1:m) = T(1:j,j+1:m)*Q;
+% 
+%     %[T(1+j+i:m,1+j+i:m),P] = Hessred(T(1+j+i:m,1+j+i:m));
+%     [P,S] = householder_qr(T(j+i+1:m,j+i+1:m));
+%     T(j+i+1:m,j+i+1:m) = P'*T(j+i+1:m,j+i+1:m)*P;
+%     T(1:j+i,j+i+1:m) = T(1:j+i,j+i+1:m)*P;
+%     V(:,j+i+1:m) = V(:,j+i+1:m)*P;   
+%    
+% end
+
+function [V,T] = deflate(V,T,y,i)
+    m = size(y,1);
+    Q = zeros(m);
+    Q(:,1) = y;
+    sigma = y(1)^2;
+    tau_0 = abs(y(1));
+    for j = 2:m
+        sigma = sigma + y(j)^2;
+        tau = sqrt(sigma);
+        if abs(tau_0) > eps
+            gamma = (y(j)/tau)/tau_0;
+            Q(1:j-1,j) = -y(1:j-1)*gamma;
+            Q(j,j) = tau_0/tau;
+        else
+            Q(j-1,j) = 1;
         end
-        T_new(1:k,1:k) = Q'*T(1:k,1:k)*Q;
+        tau_0 = tau;
     end
+        
+%     m = size(y,1);
+%     Q=zeros(m);
+%     for j = 1:m
+%         if abs(y(j)) < eps
+%             y(j) = eps/m;
+%         end
+%     end
+%     sigma = y(1);
+%     tau_0 = abs(y(1));
+%     for j = 2:m
+%         sigma = sigma+y(j)^2;
+%         tau = sqrt(sigma);
+%         gamma = -(y(j)/tau)/tau_0;
+%         rho = tau_0/tau;
+%         Q(1:j-1,j) = y(1:j-1)*gamma;
+%         Q(j,j) = rho;
+%         if j < m && tau < .05
+%             tau_p = sqrt(sigma+y(j+1)^2);
+%             alpha = y(1:j)'*T(1:j,1:j)*Q(1:j,j);
+%             delta = y(j+1)*T(j,j+1)*rho;
+%             sigma_0 = -1;
+%             if (sign(alpha)*sign(delta)) < 0
+%                 sigma_0 = 1;
+%             end
+%             if abs(delta+alpha) > eps*tau_p
+%                 if rho < sqrt(eps/100)
+%                     Q(j,j) = Q(j,j)*sigma_0*(eps/tau_p+abs(alpha))/abs(delta);
+%                 else
+%                     if abs(alpha) > abs(delta)
+%                         phi = sigma_0*(eps*tau_p + abs(delta))/abs(alpha);
+%                         y(1:j) = y(1:j)*phi;
+%                         sigma = sigma*phi^2;
+%                         tau = tau*abs(phi);
+%                     else
+%                         psi = sigma_0*(eps*tau_p+abs(alpha))/abs(delta);
+%                         y(j+1:m) = y(j+1:m)*psi;
+%                     end
+%                 end
+%             end                
+%         end
+%         tau_0 = tau;
+%     end
+%    Q(:,1) = y/norm(y);
+ 
+    T(i+1:i+m,i+1:i+m) = Q'*T(i+1:i+m,i+1:i+m)*Q;
+    V(:,i+1:i+m) = V(:,i+1:i+m)*Q;
 end
 
 % function [V,H] = deflate(V, H, X, j)
@@ -475,6 +563,41 @@ u(1) = u(1)+su*norm(u);
 u = u/norm(u);
 u = u(:);
 end
+
+% Householder QR implementation, obtained at 
+% http://www.caam.rice.edu/~caam453/lecture5.pdf
+function [V,R] = householder_qr(A)
+    % Compute the QR factorization of real A using Householder reflectors
+    % See Trefethen and Bau, Numerical Linear Algebra, Algorithm 10.1 (page 73)
+    % The object V is a "cell array": vk (a vector of length m-k+1) is stored in V{k}.
+    [m,n] = size(A);
+    Q = eye(m);
+    for k=1:min(m-1,n)
+        ak = A(k:m,k); % vector to be zeroed out
+        vk = ak; vk(1) = vk(1) + sign(ak(1))*norm(ak); % 1. construct vk that defines the reflector
+        vk = vk/norm(vk); % 2. normalize vk
+        A(k:m,k:n) = A(k:m,k:n) - 2*vk*(vk'*A(k:m,k:n)); % 3. update A
+        V{k} = vk; % store vk in a cell array
+    end
+    R = A;
+    V = explicit_Q(V);
+end
+
+%
+%
+function Q = explicit_Q(V)
+    m = size(V{1},1);
+    n = size(V);
+    I = eye(m);
+    Q = I;
+    for i = 1:n
+        v = V{i};
+        v(1:i-1) = 0;
+        Q = Q*(I-2*(v*v')); 
+    end
+end
+
+
 % function getLejaPoints(a,b,theta_k,theta_p,z_in)
 %     p = length(z_in);
 %     z = [z_in; zeros(p,1)];
@@ -540,9 +663,9 @@ function [V,H] = qrstep(V,H,mu,k1,k2)
 %
 %   clean up rounding error noise below first subdiagonal
 %
-   for j = k1:k2,
-       H(j+2:m,j) = H(j+2:m,j)*0; 
-   end
+  for j = k1:k2,
+      H(j+2:m,j) = H(j+2:m,j)*0; 
+  end
 % Implicitly restarted Arnoldi
 % Takes away one single eigenvalue or 
 % a complex cojugate pair of eigenvalues
