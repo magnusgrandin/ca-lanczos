@@ -60,7 +60,7 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lan
         Bk = I(:,2:s+1);        
     elseif strcmpi(basis,'newton')
         % Run standard Lanczos for 2s steps
-        T = lanczos(A,q,2*s,'full');
+        T = lanczos(A,q,2*s,'local');
         basis_eigs = eig(T);
         basis_shifts = leja(basis_eigs,'nonmodified');
         Bk = newton_basis_matrix(basis_shifts, s,1);
@@ -159,11 +159,14 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lan
         disp(['Converged in ' num2str(num_restarts) ' restarts.']);
         disp(['Max residual norm: ' num2str(max(conv_rnorms))]);
     else       
-        disp(['Did not converge.']);
-        conv_eigs = [];
-        conv_rnorms = [];
-        Q_conv = [];
-        orth_err = [];
+        [sort_eigs,ixs] = sort(conv_eigs,'descend');
+        sort_rnorms = conv_rnorms(ixs);
+        conv_eigs = sort_eigs(1:nconv);
+        conv_rnorms = sort_rnorms(1:nconv);
+        Q_conv = Q_conv(:,ixs);
+        Q_conv = Q_conv(:,1:nconv);
+        disp(['Did not converge in ' num2str(num_restarts) ' restarts.']);
+        disp(['Max residual norm: ' num2str(max(conv_rnorms))]);
     end
 end
 
