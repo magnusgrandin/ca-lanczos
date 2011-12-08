@@ -1,6 +1,6 @@
-function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
+function [conv_eigs,Q_conv,num_restarts,rnorms,orth_err] = restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
 
-    max_restarts = 100;
+    max_restarts = 400;
 
     % Check input arguments
     if nargin < 3
@@ -70,7 +70,8 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lan
     Q_conv = [];
     conv_eigs = [];
     conv_rnorms = [];
-    orth_err = [];
+    rnorms = zeros(max_restarts,n_wanted_eigs);
+    orth_err = [];  
     
     num_restarts = 0;
     restart = true;
@@ -99,12 +100,6 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lan
             % Do nothing
         end
  
-        % Update the maximum orthogonalization error
-        if nargout >= 4
-            Q_ = [Q_conv Q_new];
-            orth_err = [orth_err; norm(eye(size(Q_,2))-Q_'*Q_,'fro')];
-        end
-
         % Compute residual norm estimates of all computed ritz-pairs.
         ritz_norms = zeros(s*iters,1);
         [Vp,Dp] = eig(T(1:s*iters,1:s*iters));
@@ -130,16 +125,46 @@ function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_ca_lan
             end
         end
         
-        
+        % Save the converged eigenspace information
         for i = 1:k
-            Q(:,i+nconv) = Q_new*Vp(:,i);
+            Q(:,nconv+i) = Q_new*Vp(:,i);
             conv_eigs = [conv_eigs; Dp(i,i)];
             conv_rnorms = [conv_rnorms; ritz_norms(i)];
         end
+    
+        if nargout >= 3    
+            % Since the previously converged eigenpairs have not been
+            % touched, just copy the corresponding residual norms.
+            if num_restarts > 1
+                rnorms(num_restarts,1:nconv) = rnorms(num_restarts-1,1:nconv);
+            end
+            % Save the relative residual norms of the newly converged
+            % eigenpairs.
+            for i = 1:k
+                l = conv_eigs(nconv+i);
+                x = Q(:,nconv+i);
+                rnorms(num_restarts,nconv+i) = norm(A*x-l*x)/norm(l*x);
+            end
+            [d,ix] = sort(diag(Dp(k+1:end,k+1:end)),'descend');
+            for i = 1:n_wanted_eigs-nconv-k
+                l = d(i);
+                x = Q_new*Vp(:,ix(i));
+                rnorms(num_restarts,nconv+i+k) = norm(A*x-l*x)/norm(l*x);
+            end
+%            rn_sort = sort(ritz_norms);
+%            rnorms(num_restarts,:) = [conv_rnorms',rn_sort(k+1:n_wanted_eigs-nconv)'];
+        end
+            
+        % Update the maximum orthogonalization error
+        if nargout >= 4
+            Q_ = [Q_conv Q_new];
+            orth_err = [orth_err; norm(eye(size(Q_,2))-Q_'*Q_,'fro')];
+        end
+
         % Update the count of converged eigenvalues
         nconv = nconv+k;
         Q_conv = Q(:,1:nconv);
-
+               
         % Check if we should continue iterations
         restart = check_wanted_eigs(conv_eigs, diag(Dp), n_wanted_eigs);
 
