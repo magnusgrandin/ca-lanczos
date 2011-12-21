@@ -97,6 +97,16 @@ function [ritz_rnorm] = compute_ritz_rnorm(A,Q,Vp,Dp)
     end
 end
 
+function [orth_err] = compute_orth_err(Q,s)
+%    orth_err = norm(eye(size(Q,2))-Q'*Q,'fro');
+    j = size(Q,2);
+    if j > s+1
+        orth_err = max(max(abs(Q(:,1:j-s-1)'*Q(:,j-s:j))));
+    else
+        orth_err = max(max(abs(Q(:,1:j)'*Q(:,1:j) - eye(s+1))));
+    end
+end
+
 % Compute matrix powers
 function V = matrix_powers(A, q, s, Bk, basis)
     if strcmpi(basis,'monomial')
@@ -180,11 +190,12 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_basic(A, q, Bk, iter, s, basis, orth)
                 Rkk_s = Rk_{1};
                 Rk_s = Rk_{2};
             elseif strcmpi(orth,'fro')
-                % Orthogonality against all previous basis vectors
-                [Q_,Rk_] = projectAndNormalize({Q(:,1:(k-2)*s),Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),true);
-                Rkk_s = Rk_{2};
-                Rk_s = Rk_{3};
+                % Orthogonality against all previous basis vectors                
+                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),true);
+                Rkk_s = Rk_{1};
+                Rk_s = Rk_{2};
                 Q(:,(k-1)*s+2:k*s+1) = Q_;
+                Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s+1)},Q(:,(k-1)*s+2:k*s+1));
             end
             
             % Compute Tk (tridiagonal sub-matrix of T)
@@ -222,8 +233,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_basic(A, q, Bk, iter, s, basis, orth)
         
         % Compute the orthogonalization error
         if nargout >= 4
-            Q_ = Q(:,1:s*k);
-            ortherr(k) = norm(eye(size(Q_,2))-Q_'*Q_,'fro');
+            ortherr(k) = compute_orth_err(Q(:,1:s*k+1),s);
         end
 
     end
@@ -238,8 +248,8 @@ end
 
 function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, Bk, iter, s, basis)
 
-    rnorm = zeros(iter,2);
-    ortherr = zeros(t,1);
+    rnorm = zeros(iter,iter*s);
+    ortherr = zeros(iter,1);
 
     n = length(q);
     Q = zeros(n,iter*s);
@@ -252,7 +262,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, Bk, iter, s, basis)
     Q(:,1) = q;
     
     k = 0;
-    while k <= iter
+    while k < iter
 
         k = k+1;
 
@@ -325,18 +335,31 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, Bk, iter, s, basis)
         end
 
         disp(['nritz=' num2str(nritz)])
+
+        % Compute the ritz-norm, if it is required
+        if nargout >= 3
+            [Vp,Dp] = eig(T(1:s*k,1:s*k));
+            rnorm(k,1:s*k) = compute_ritz_rnorm(A,Q(:,1:s*k),Vp,Dp);
+        end
+        
+        % Compute the orthogonalization error
+        if nargout >= 4
+            ortherr(k) = compute_orth_err(Q(:,1:s*k+1),s);
+        end
     end
       
     % Fix output
-    T = T(1:s*(k-1)+1,1:s*(k-1));
-    Q = Q(:,1:s*(k-1));
+    T = T(1:s*k,1:s*k);
+    Q = Q(:,1:s*k);
+    rnorm = rnorm(1:k,:);
+    ortherr = ortherr(1:k);
 
 end
          
 
 function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, Bk, iter, s, basis)
 
-    rnorm = zeros(iter,2);
+    rnorm = zeros(iter,iter*s);
     ortherr = zeros(iter,1);
 
     n = length(q);
@@ -349,7 +372,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, Bk, iter, s, basis)
     Q(:,1) = q;
 
     k = 0;
-    while k <= iter
+    while k < iter
 
         k = k+1;
 
@@ -405,25 +428,36 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, Bk, iter, s, basis)
         alpha = diag(T,0);
         beta  = diag(T,-1);
         omega = update_omega(omega,alpha,beta,norm_A, s);
-        err = max(max(abs(omega - eye(size(omega)))));
-        if err >= norm_A*sqrt(eps)
-           %  Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s+1)},Q(:,(k-1)*s+2:k*s+1),true);
-           prevVecs = 1:(k-1)*s+1;
-            if ~isempty(prevVecs)
-                Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,prevVecs),Q_conv},Q(:,(k-1)*s+2:k*s+1),true);
-            else
-                orthVecs = max((k-2)*s+2,1):k*s+1;
-                Q(:,orthVecs) = normalize(Q(:,orthVecs));
+        err = 0;
+        for i = 1:s
+            omega_row = omega((k-1)*s+i+1,:);
+            row_err = max(abs(omega_row(1:i)));
+            if(row_err > err)
+                err = row_err;
             end
+        end
+        if err >= sqrt(eps) %norm_A*
+            Q(:,(k-1)*s+1:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s)},Q(:,(k-1)*s+1:k*s+1),true);
             omega = reset_omega(omega, norm_A, s);
+        end
+        
+        % Compute the ritz-norm, if it is required
+        if nargout >= 3
+            [Vp,Dp] = eig(T(1:s*k,1:s*k));
+            rnorm(k,1:s*k) = compute_ritz_rnorm(A,Q(:,1:s*k),Vp,Dp);
+        end
+        
+        % Compute the orthogonalization error
+        if nargout >= 4
+            ortherr(k) = compute_orth_err(Q(:,1:s*k+1),s);
         end
     end
       
     % Fix output
-    T = T(1:s*(k-1),1:s*(k-1));
-    Q = Q(:,1:s*(k-1));
-    rnorm = rnorm(1:(k-1),:);
-    ortherr = ortherr(1:(k-1));
+    T = T(1:s*k,1:s*k);
+    Q = Q(:,1:s*k);
+    rnorm = rnorm(1:k,:);
+    ortherr = ortherr(1:k);
 end
 
 function omega = update_omega(omega_in, alpha, beta, anorm, s)

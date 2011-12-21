@@ -77,8 +77,10 @@ function [ritz_rnorm] = compute_ritz_rnorm(A,Q,Vp,Dp)
     end
 end
 
-function [orth_err] = compute_orth_err(Q)      
-    orth_err = norm(eye(size(Q,2))-Q'*Q,'fro');
+function [orth_err] = compute_orth_err(Q)
+%    orth_err = norm(eye(size(Q,2))-Q'*Q,'fro');
+    j = size(Q,2);
+    orth_err = max(Q(:,1:j-1)'*Q(:,j));
 end
 
 function [Q,T,rnorm,ortherr] = lanczos_basic(A,q,maxiter,orth)
@@ -121,8 +123,7 @@ function [Q,T,rnorm,ortherr] = lanczos_basic(A,q,maxiter,orth)
                
         % Compute the orthogonalization error
         if nargout >= 4
-            Q_ = Q(:,1:j);
-            ortherr(j) = norm(eye(size(Q_,2))-Q_'*Q_,'fro');
+            ortherr(j) = compute_orth_err(Q(:,1:j+1));
         end
                        
         j = j+1;
@@ -141,7 +142,7 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A,q,maxiter)
     Q(:,1) = q;
     alpha = zeros(1,maxiter);
     beta = zeros(1,maxiter);
-    rnorm = zeros(maxiter,2);
+    rnorm = zeros(maxiter,maxiter);
     ortherr = zeros(maxiter,1);
     norm_A = normest(A);
     norm_sqrt_eps = norm_A*sqrt(eps);
@@ -183,15 +184,15 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A,q,maxiter)
         end
      
         % Compute the ritz-norm, if it is required
-        if nargout <= 3
-            T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
+        if nargout >= 3
+            T = diag(alpha(1:j)) + diag(beta(1:j-1),1) + diag(beta(1:j-1),-1);
             [Vp,Dp] = eig(T);
-            rnorm(j,:) = compute_ritz_rnorm(A,Q(:,1:j-1),Vp,Dp);
+            rnorm(j,1:j) = compute_ritz_rnorm(A,Q(:,1:j),Vp,Dp);
         end
         
         % Compute the orthogonalization error, if it is required
-        if nargout <= 4
-            ortherr(j) = compute_orth_err(Q(:,1:j-1));
+        if nargout >= 4
+            ortherr(j) = compute_orth_err(Q(:,1:j+1));
         end
                        
         j = j+1;
@@ -209,7 +210,7 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A,q,maxiter)
     Q(:,1) = q;
     alpha = zeros(1,maxiter);
     beta = zeros(1,maxiter);
-    rnorm = zeros(maxiter,2);
+    rnorm = zeros(maxiter,maxiter);
     ortherr = zeros(maxiter,1);
     omega = [];
     norm_A = normest(A);
@@ -228,22 +229,23 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A,q,maxiter)
         Q(:,j+1) = r/beta(j);
         
         % Compute the ritz-norm, if it is required
-        if nargout <= 3
-            T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
+        if nargout >= 3
+            T = diag(alpha(1:j)) + diag(beta(1:j-1),1) + diag(beta(1:j-1),-1);
             [Vp,Dp] = eig(T);
-            rnorm(j,:) = compute_ritz_rnorm(A,Q(:,1:j-1),Vp,Dp);
+            rnorm(j,1:j) = compute_ritz_rnorm(A,Q(:,1:j),Vp,Dp);
         end
         
         % Compute the orthogonalization error, if it is required
-        if nargout <= 4
-            ortherr(j) = compute_orth_err(Q(:,1:j-1));
+        if nargout >= 4
+            ortherr(j) = compute_orth_err(Q(:,1:j+1));
         end
                        
         % Estimate orthogonalization error, reorthogonalize if necessary
         omega = update_omega(omega, j, alpha, beta, norm_A);
-        err = max(max(abs(omega - eye(size(omega)))));
-        if err >= norm_A*sqrt(eps)
-            Q(:,j+1) = projectAndNormalize({Q(:,1:j)},Q(:,j+1),false);
+        %err = max(max(abs(omega - eye(size(omega)))));
+        err = max(max(abs(omega(j+1,1:j))));
+        if err >= sqrt(eps) %/j
+            Q(:,j:j+1) = projectAndNormalize({Q(:,1:j-1)},Q(:,j:j+1),true);
             omega = reset_omega(omega, j, norm_A);
         end
         

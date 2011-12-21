@@ -196,7 +196,7 @@ function [conv_eigs,Q_conv,num_restarts,rnorms,orth_err] = restarted_ca_lanczos(
 end
 
 function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
-    if nargin < 4
+    if nargin < 6
         strategy = 'largest';
     end
     m = length(eig_vals);
@@ -208,6 +208,7 @@ function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
                 l = j;
             end
         end
+        eig_vals(l)
         q = Q*eig_vecs(:,l);
     elseif strcmpi(strategy,'smallest')
         % Generate new starting vector from the smallest non-converged basis vector.
@@ -237,7 +238,7 @@ function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
     end
     
     % Normalize the new vector
-    q = q/norm(q);
+    %q = q/norm(q);
 end
 
 function restart = check_wanted_eigs(conv_eigs, eigs, num_wanted_eigs)
@@ -526,16 +527,16 @@ function [Q,T] = lanczos_periodic(A, Q_conv, q, Bk, maxiter, s, basis)
         alpha = diag(T,0);
         beta  = diag(T,-1);
         omega = update_omega(omega,alpha,beta,norm_A, s);
-        err = max(max(abs(omega - eye(size(omega)))));
-        if err >= norm_A*sqrt(eps)
-           %  Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s+1)},Q(:,(k-1)*s+2:k*s+1),true);
-           prevVecs = 1:(k-1)*s+1;
-            if ~isempty(prevVecs)
-                Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q(:,prevVecs),Q_conv},Q(:,(k-1)*s+2:k*s+1),true);
-            else
-                orthVecs = max((k-2)*s+2,1):k*s+1;
-                Q(:,orthVecs) = normalize(Q(:,orthVecs));
+        err = 0;
+        for i = 1:s
+            omega_row = omega((k-1)*s+i+1,:);
+            row_err = max(omega_row(1:i));
+            if(row_err > err)
+                err = row_err;
             end
+        end
+        if err >= sqrt(eps/(k*s)) %norm_A
+            Q(:,(k-1)*s+1:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s)},Q(:,(k-1)*s+1:k*s+1),true);
             omega = reset_omega(omega, norm_A, s);
         end
     end
@@ -553,14 +554,14 @@ function omega = update_omega(omega_in, alpha, beta, anorm, s)
     
     % Estimate of contribution to roundoff errors from A*v:  fl(A*v) = A*v + f, 
     T = eps*anorm;
-        
+    
     if isempty(omega_in) 
         omega = zeros(s+1,s+1);
         omega(1,1) = 1;
         omega(1,2) = 0;
         omega(2,1) = T/beta(1);
         omega(2,2) = 1;
-
+        
         for j = 2:s
             binv = 1.0/beta(j);
             % k == 1, omega(j,k-1) == 0
@@ -614,7 +615,7 @@ function omega = update_omega(omega_in, alpha, beta, anorm, s)
             omega(j+1,j) = binv*T;
             omega(j+1,j+1) = 1;
         end
-    end
+    end        
 end
 
 function omega = reset_omega(omega_in, anorm, s)
