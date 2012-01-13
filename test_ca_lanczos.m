@@ -1,10 +1,4 @@
-function test_ca_lanczos(matrix, steps, orth, eig_s, eig_l)
-
-% Load matrix
-load(matrix);
-Problem
-A=Problem.A;
-n=size(A,1);
+function test_ca_lanczos(A, r0, steps, orth, basis, eig_s, eig_l)
 
 % Total number of Lanczos steps (maximum)
 if nargin >= 2 && isempty(steps)
@@ -15,9 +9,6 @@ if nargin >= 2 && steps ~= 0
 else
     m=120;
 end
-
-% Starting vector
-r0=rand(n,1);
 
 % Orhtogonality option
 if nargin < 3 || ~exist('orth','var')
@@ -36,20 +27,17 @@ time_st=cputime-time_st;
 
 % CA-Lanczos, for several values of s
 time_ca_4=cputime;
-[T_ca_4,V_ca_4,r_ca_4,o_ca_4]=ca_lanczos(A,r0,4,m/4,basis,orth);
+[T_ca_4,V_ca_4,r_ca_4,o_ca_4]=ca_lanczos(A,r0,4,m,basis,orth);
 time_ca_4=cputime-time_ca_4;
-time_ca_6=cputime;
-[T_ca_6,V_ca_6,r_ca_6,o_ca_6]=ca_lanczos(A,r0,6,m/6,basis,orth);
-time_ca_6=cputime-time_ca_6;
 time_ca_8=cputime;
-[T_ca_8,V_ca_8,r_ca_8,o_ca_8]=ca_lanczos(A,r0,8,m/8,basis,orth);
+[T_ca_8,V_ca_8,r_ca_8,o_ca_8]=ca_lanczos(A,r0,8,m,basis,orth);
 time_ca_8=cputime-time_ca_8;
-time_ca_10=cputime;
-[T_ca_10,V_ca_10,r_ca_10,o_ca_10]=ca_lanczos(A,r0,10,m/10,basis,orth);
-time_ca_10=cputime-time_ca_10;
-%time_ca_20=cputime;
-%[T_ca_20,V_ca_20,r_ca_20,o_ca_20]=ca_lanczos(A,r0,20,m/20,basis,orth);
-%time_ca_20=cputime-time_ca_20;
+time_ca_12=cputime;
+[T_ca_12,V_ca_12,r_ca_12,o_ca_12]=ca_lanczos(A,r0,12,m,basis,orth);
+time_ca_12=cputime-time_ca_12;
+time_ca_16=cputime;
+[T_ca_16,V_ca_16,r_ca_16,o_ca_16]=ca_lanczos(A,r0,16,m,basis,orth);
+time_ca_16=cputime-time_ca_16;
 
 % Compute reference smallest and largest eigenvalues
 opts.disp=0;
@@ -88,30 +76,24 @@ disp(['Execution time:                ', num2str(time_ca_4)]);
 disp(['Number of iterations:          ', num2str(size(T_ca_4,1))]);
 disp(['Error in smallest eigenvalue:  ', num2str(abs(se-min(eig_T_ca_4))/abs(se))]);
 disp(['Error in largest eigenvalue:   ', num2str(abs(le-max(eig_T_ca_4))/abs(le))]);
-eig_T_ca_6 = eig(T_ca_6);
-disp('CA-Lanczos, s=6');
-disp(['Execution time:                ', num2str(time_ca_6)]);
-disp(['Number of iterations:          ', num2str(size(T_ca_6,1))]);
-disp(['Error in smallest eigenvalue:  ', num2str(abs(se-min(eig_T_ca_6))/abs(se))]);
-disp(['Error in largest eigenvalue:   ', num2str(abs(le-max(eig_T_ca_6))/abs(le))]);
 eig_T_ca_8 = eig(T_ca_8);
 disp('CA-Lanczos, s=8');
 disp(['Execution time:                ', num2str(time_ca_8)]);
 disp(['Number of iterations:          ', num2str(size(T_ca_8,1))]);
 disp(['Error in smallest eigenvalue:  ', num2str(abs(se-min(eig_T_ca_8))/abs(se))]);
 disp(['Error in largest eigenvalue:   ', num2str(abs(le-max(eig_T_ca_8))/abs(le))]);
-eig_T_ca_10 = eig(T_ca_10);
-disp('CA-Lanczos, s=10');
-disp(['Execution time:                ', num2str(time_ca_10)]);
-disp(['Number of iterations:          ', num2str(size(T_ca_10,1))]);
-disp(['Error in smallest eigenvalue:  ', num2str(abs(se-min(eig_T_ca_10))/abs(se))]);
-disp(['Error in largest eigenvalue:   ', num2str(abs(le-max(eig_T_ca_10))/abs(le))]);
-%eig_T_ca_20 = eig(T_ca_20);
-%disp('CA-Lanczos, s=20');
-%disp(['Execution time:                ', num2str(time_ca_20)]);
-%disp(['Number of iterations:          ', num2str(size(T_ca_20,1))]);
-%disp(['Error in smallest eigenvalue:  ', num2str(abs(se-min(eig_T_ca_20))/abs(se))]);
-%disp(['Error in largest eigenvalue:   ', num2str(abs(le-max(eig_T_ca_20))/abs(le))]);
+eig_T_ca_12 = eig(T_ca_12);
+disp('CA-Lanczos, s=12');
+disp(['Execution time:                ', num2str(time_ca_12)]);
+disp(['Number of iterations:          ', num2str(size(T_ca_12,1))]);
+disp(['Error in smallest eigenvalue:  ', num2str(abs(se-min(eig_T_ca_12))/abs(se))]);
+disp(['Error in largest eigenvalue:   ', num2str(abs(le-max(eig_T_ca_12))/abs(le))]);
+eig_T_ca_16 = eig(T_ca_16);
+disp('CA-Lanczos, s=16');
+disp(['Execution time:                ', num2str(time_ca_16)]);
+disp(['Number of iterations:          ', num2str(size(T_ca_16,1))]);
+disp(['Error in smallest eigenvalue:  ', num2str(abs(se-min(eig_T_ca_16))/abs(se))]);
+disp(['Error in largest eigenvalue:   ', num2str(abs(le-max(eig_T_ca_16))/abs(le))]);
 disp('=======');
 
 %Define some colors for plotting
@@ -121,73 +103,80 @@ red          = [   1   0   0 ];
 orchid       = [ .85 .44 .84 ];
 pink         = [   1 .41 .71 ];
 salmon       = [ .98 .50 .45 ];
-orange       = [   1 .55   0 ]; 
-royalblue    = [.25  .41 .88 ];
+orange       = [   1 .5   0 ];
+royalblue    = [ .25 .41 .88 ];
+blueviolet   = [ .58 .40 .64 ];
+%orange       = [ .95 .19 .33 ];
 
 % Plot the eigenvalues
 figure; hold on;
 plot((0:size(T_st,1)-1)/(size(T_st,1)-1),sort(eig_T_st),'*','Color',mediumgreen);
 plot((0:size(T_ca_4,1)-1)/(size(T_ca_4,1)-1),sort(eig_T_ca_4),'o','Color',red);
-plot((0:size(T_ca_6,1)-1)/(size(T_ca_6,1)-1),sort(eig_T_ca_6),'o','Color',orchid);
-plot((0:size(T_ca_8,1)-1)/(size(T_ca_8,1)-1),sort(eig_T_ca_8),'o','Color',royalblue);
-plot((0:size(T_ca_10,1)-1)/(size(T_ca_10,1)-1),sort(eig_T_ca_10),'o','Color',orange);
-%plot((0:size(T_ca_20,1)-1)/(size(T_ca_20,1)-1),sort(eig_T_ca_20),'o','Color',salmon);
+plot((0:size(T_ca_8,1)-1)/(size(T_ca_8,1)-1),sort(eig_T_ca_8),'s','Color',royalblue);
+plot((0:size(T_ca_12,1)-1)/(size(T_ca_12,1)-1),sort(eig_T_ca_12),'d','Color',orange);
+plot((0:size(T_ca_16,1)-1)/(size(T_ca_16,1)-1),sort(eig_T_ca_16),'^','Color',blueviolet);
 title('Spectrum of A');
 
-% Plot the convergence of the smallest eigenpair
-figure;
-semilogy(1:size(T_st,1),r_st(:,1),'*:','Color',mediumgreen,'MarkerSize',8);  hold on;
-semilogy((1:size(T_ca_4,1)/4)*4,r_ca_4(:,1),'o:','Color',red,'MarkerSize',8,'LineWidth',1.5);
-semilogy((1:size(T_ca_6,1)/6)*6,r_ca_6(:,1),'o:','Color',orchid,'MarkerSize',8,'LineWidth',1.5);
-semilogy((1:size(T_ca_8,1)/8)*8,r_ca_8(:,1),'o:','Color',royalblue,'MarkerSize',8,'LineWidth',1.5);
-semilogy((1:size(T_ca_10,1)/10)*10,r_ca_10(:,1),'o:','Color',orange,'MarkerSize',8,'LineWidth',1.5);
-%semilogy((1:size(T_ca_20,1)/20)*20,r_ca_20(:,1),'o:','Color',salmon,'MarkerSize',8,'LineWidth',1.5);
-title('Convergence of smallest eigenpair');
-ylabel('||Ay - \lambda y||');
-xlabel('Iterations');
-legend('Lanczos','CA-Lanczos(4)','CA-Lanczos(6)','CA-Lanczos(8)','CA-Lanczos(10)','CA-Lanczos(20)');
-if (min(r_st(:,1)) < 1.0e-14) ...
-   || (min(r_ca_4(:,1)) < 1.0e-14) || (min(r_ca_6(:,1)) < 1.0e-14) ...
-   || (min(r_ca_8(:,1)) < 1.0e-14) || (min(r_ca_10(:,1)) < 1.0e-14) ...%|| (min(r_ca_20(:,1)) < 1.0e-14)
-
-    ylim([1.0e-16 1.0e02]);
-end
+% % Plot the convergence of the smallest eigenpair
+% figure;
+% semilogy(1:size(T_st,end),r_st(:,1),'*:','Color',mediumgreen,'MarkerSize',8);  hold on;
+% semilogy((1:size(T_ca_4,end)/4)*4,r_ca_4(:,1),'o:','Color',red,'MarkerSize',8,'LineWidth',1.5);
+% semilogy((1:size(T_ca_8,end)/8)*8,r_ca_8(:,1),'o:','Color',royalblue,'MarkerSize',8,'LineWidth',1.5);
+% semilogy((1:size(T_ca_12,end)/12)*10,r_ca_12(:,1),'o:','Color',orange,'MarkerSize',8,'LineWidth',1.5);
+% %semilogy((1:size(T_ca_16,end)/16)*16,r_ca_16(:,1),'o:','Color',salmon,'MarkerSize',8,'LineWidth',1.5);
+% title('Convergence of smallest eigenpair');
+% ylabel('||Ay - \lambda y||');
+% xlabel('Iterations');
+% legend('Lanczos','CA-Lanczos(4)','CA-Lanczos(8)','CA-Lanczos(12)','CA-Lanczos(16)');
+% if (min(r_st(:,1)) < 1.0e-14) ...
+%    || (min(r_ca_4(:,1)) < 1.0e-14) || (min(r_ca_8(:,1)) < 1.0e-14) || ...
+%       (min(r_ca_12(:,1)) < 1.0e-14) ...%|| (min(r_ca_16(:,1)) < 1.0e-14)
+% 
+%     ylim([1.0e-16 1.0e02]);
+% end
 
 % Plot the convergence of the largest eigenpair
-figure;
-semilogy(1:size(T_st,1),r_st(:,2),'*:','Color',mediumgreen,'MarkerSize',8);  hold on;
-semilogy((1:size(T_ca_4,1)/4)*4,r_ca_4(:,2),'o:','Color',red,'MarkerSize',8,'LineWidth',1.5);
-semilogy((1:size(T_ca_6,1)/6)*6,r_ca_6(:,2),'o:','Color',orchid,'MarkerSize',8,'LineWidth',1.5);
-semilogy((1:size(T_ca_8,1)/8)*8,r_ca_8(:,2),'o:','Color',royalblue,'MarkerSize',8,'LineWidth',1.5);
-semilogy((1:size(T_ca_10,1)/10)*10,r_ca_10(:,2),'o:','Color',orange,'MarkerSize',8,'LineWidth',1.5);
-%semilogy((1:size(T_ca_20,1)/20)*20,r_ca_20(:,2),'o:','Color',salmon,'MarkerSize',8,'LineWidth',1.5);
-title('Convergence of largest eigenpair');
-ylabel('||Ay - \lambda y||');
-xlabel('Iterations');
-legend('Lanczos','CA-Lanczos(4)','CA-Lanczos(6)','CA-Lanczos(8)','CA-Lanczos(10)','CA-Lanczos(20)');
-if (min(r_st(:,2)) < 1.0e-14) ...
-   || (min(r_ca_4(:,2)) < 1.0e-14) || (min(r_ca_6(:,2)) < 1.0e-14) ...
-   || (min(r_ca_8(:,2)) < 1.0e-14) || (min(r_ca_10(:,2)) < 1.0e-14) ...%|| (min(r_ca_20(:,2)) < 1.0e-14)
-
-    ylim([1.0e-16 1.0e02]);
-end
+figure('Position',[1 1 500 500]);
+subplot(2,1,1);
+set(gca,'FontSize',16)
+semilogy(1:size(T_st,1),r_st(:,1),'*:','Color',mediumgreen,'MarkerSize',8);  hold on;
+semilogy((1:size(T_ca_4,1)/4)*4,r_ca_4(:,1),'o:','Color',red,'MarkerSize',8,'LineWidth',1);
+semilogy((1:size(T_ca_8,1)/8)*8,r_ca_8(:,1),'s:','Color',royalblue,'MarkerSize',8,'LineWidth',1);
+semilogy((1:size(T_ca_12,1)/12)*12,r_ca_12(:,1),'d:','Color',orange,'MarkerSize',8,'LineWidth',1);
+semilogy((1:size(T_ca_16,1)/16)*16,r_ca_16(:,1),'^:','Color',blueviolet,'MarkerSize',8,'LineWidth',1);
+%title('Convergence of largest eigenpair');
+%ylabel('||Ay - \lambda y||');
+ylabel('Relative residual norm');
+%xlabel('Iteration');
+legend('Lanczos','s=4','s=8','s=12','s=16','Location','North','Orientation','Horizontal');
+ylim([1.0e-16 1.0e03]);
+set(gca,'YTick',[1e-15,1e-10,1e-05,1]);
+% if (min(r_st(:,2)) < 1.0e-14) ...
+%    || (min(r_ca_4(:,2)) < 1.0e-14) || (min(r_ca_6(:,2)) < 1.0e-14) ...
+%    || (min(r_ca_8(:,2)) < 1.0e-14) || (min(r_ca_10(:,2)) < 1.0e-14) ...%|| (min(r_ca_16(:,2)) < 1.0e-14)
+% 
+%     ylim([1.0e-16 1.0e03]);
+% end
 
 % Plot the orthogonality 
-figure;
+subplot(2,1,2);
+set(gca,'FontSize',16)
 semilogy(1:size(T_st,1),o_st,'*:','Color',mediumgreen,'MarkerSize',8); hold on;
-semilogy((1:size(T_ca_4,1)/4)*4,o_ca_4,'o:','Color',red,'MarkerSize',8,'LineWidth',1.5);
-semilogy((1:size(T_ca_6,1)/6)*6,o_ca_6,'o:','Color',orchid,'MarkerSize',8,'LineWidth',1.5);
-semilogy((1:size(T_ca_8,1)/8)*8,o_ca_8,'o:','Color',royalblue,'MarkerSize',8,'LineWidth',1.5);
-semilogy((1:size(T_ca_10,1)/10)*10,o_ca_10,'o:','Color',orange,'MarkerSize',8,'LineWidth',1.5);
-%semilogy((1:size(T_ca_20,1)/20)*20,o_ca_20,'o:','Color',salmon,'MarkerSize',8,'LineWidth',1.5);
-title('Orthogonality of basis vectors');
-ylabel('|| I - Q_m^*Q ||_F');
-xlabel('Iterations');
-legend('Lanczos','CA-Lanczos(4)','CA-Lanczos(6)','CA-Lanczos(8)','CA-Lanczos(10)','CA-Lanczos(20)');
+semilogy((1:size(T_ca_4,1)/4)*4,o_ca_4,'o:','Color',red,'MarkerSize',8,'LineWidth',1);
+semilogy((1:size(T_ca_8,1)/8)*8,o_ca_8,'s:','Color',royalblue,'MarkerSize',8,'LineWidth',1);
+semilogy((1:size(T_ca_12,1)/12)*12,o_ca_12,'d:','Color',orange,'MarkerSize',8,'LineWidth',1);
+semilogy((1:size(T_ca_16,1)/16)*16,o_ca_16,'^:','Color',blueviolet,'MarkerSize',8,'LineWidth',1);
+%title('Orthogonality of basis vectors');
+%ylabel('|| I - Q_m^*Q ||_F');
+ylabel('Orthogonalization error');
+xlabel('Iteration');
+%legend('Lanczos','s=4','s=6','s=8','s=10','s=16','Location','North');
+ylim([1.0e-16 1e02]);
+set(gca,'YTick',[1e-15,1e-10,1e-05,1]);
          
-if (min(o_st) < 1.0e-14) ...
-   || (min(o_ca_4) < 1.0e-14) || (min(o_ca_6) < 1.0e-14) ...
-   || (min(o_ca_8) < 1.0e-14) || (min(o_ca_10) < 1.0e-14) ...%|| (min(o_ca_20) < 1.0e-14)
-
-    ylim([1.0e-16 1.0e02]);
-end
+% if (min(o_st) < 1.0e-14) ...
+%    || (min(o_ca_4) < 1.0e-14) || (min(o_ca_6) < 1.0e-14) ...
+%    || (min(o_ca_8) < 1.0e-14) || (min(o_ca_10) < 1.0e-14) ...%|| (min(o_ca_16) < 1.0e-14)
+% 
+%     ylim([1.0e-16 1.0e02]);
+% end
