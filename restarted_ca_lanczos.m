@@ -1,6 +1,6 @@
 function [conv_eigs,Q_conv,num_restarts,rnorms,orth_err] = restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
 
-    max_restarts = 400;
+    max_restarts = 200;
 
     % Check input arguments
     if nargin < 3
@@ -31,9 +31,10 @@ function [conv_eigs,Q_conv,num_restarts,rnorms,orth_err] = restarted_ca_lanczos(
     end
     norm_A = normest(A);
     if nargin < 8 || isempty(tol)
-        tol = 1.0e-06;
+        tol = 1.0e-08;
     end
     tol = tol*norm_A;
+    %tol = sqrt(tol);
 
     if strcmpi(orth,'local')
         disp('Local orthogonalization');
@@ -66,7 +67,7 @@ function [conv_eigs,Q_conv,num_restarts,rnorms,orth_err] = restarted_ca_lanczos(
         Bk = newton_basis_matrix(basis_shifts, s,1);
     end
 
-    Q = zeros(n,max_lanczos+s);
+    Q = zeros(n,max_lanczos+n_wanted_eigs);
     Q_conv = [];
     conv_eigs = [];
     conv_rnorms = [];
@@ -81,7 +82,9 @@ function [conv_eigs,Q_conv,num_restarts,rnorms,orth_err] = restarted_ca_lanczos(
         num_restarts = num_restarts+1;
         
         % Get the number of iterations to do next.
-        iters = floor((max_lanczos-nconv)/s);
+        %iters = floor((max_lanczos-nconv)/s);
+        iters = floor(max_lanczos/s);
+        
         if iters == 0
             % Check if we got all the eigenpairs we were after.
             restart = check_wanted_eigs(conv_eigs, diag(Dp(k+1:s*iters,k+1:s*iters)), n_wanted_eigs);
@@ -106,7 +109,7 @@ function [conv_eigs,Q_conv,num_restarts,rnorms,orth_err] = restarted_ca_lanczos(
         beta = T(s*iters+1,s*iters);
         for i = 1:s*iters
             y = Vp(:,i);
-            ritz_norms(i) = beta*abs(y(s*iters)) + eps*norm_A;
+            ritz_norms(i) = beta*abs(y(s*iters));% + eps*norm_A;
         end
                
         % Rearrange the eigenvalues such that the converged ones are first.
@@ -170,7 +173,7 @@ function [conv_eigs,Q_conv,num_restarts,rnorms,orth_err] = restarted_ca_lanczos(
 
         if restart
             q = generateStartVector(diag(Dp),Vp,Q_new,ritz_norms,k,restart_strategy);   
-            q = projectAndNormalize({Q_conv},q,true);
+            %q = projectAndNormalize({Q_conv},q,true);
         end
     end
 
@@ -238,7 +241,7 @@ function q = generateStartVector(eig_vals,eig_vecs,Q,ritz_norms,k,strategy)
     end
     
     % Normalize the new vector
-    %q = q/norm(q);
+    q = q/norm(q);
 end
 
 function restart = check_wanted_eigs(conv_eigs, eigs, num_wanted_eigs)
@@ -321,11 +324,10 @@ function [Q,T] = lanczos_basic(A, Q_conv, q, Bk, maxiter, s, basis, orth)
                 Rk_s = Rk_{3};
             elseif strcmpi(orth,'fro')
                 % Orthogonality against all previous basis vectors
-                [Q_,Rk_] = projectAndNormalize({Q(:,1:(k-2)*s),Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),true);
-                Rkk_s = Rk_{2};
-                Rk_s = Rk_{3};
-                [Q_,R_] = projectAndNormalize({Q_conv},Q_,true);
-                Q(:,(k-1)*s+2:k*s+1) = Q_;
+                [Q_,Rk_] = projectAndNormalize({Q(:,(k-2)*s+1:(k-1)*s+1)},V(:,2:s+1),true);
+                Rkk_s = Rk_{1};
+                Rk_s = Rk_{2};
+                Q(:,(k-1)*s+2:k*s+1) = projectAndNormalize({Q_conv,Q(:,1:(k-2)*s)},Q_,true);
             end
             
             % Compute Tk (tridiagonal sub-matrix of T)
