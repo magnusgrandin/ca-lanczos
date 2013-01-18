@@ -20,3 +20,7 @@ for orth = orthos
         test_ca_lanczos(A,r,niter,orth,basis);
     end
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

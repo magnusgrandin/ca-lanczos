@@ -226,3 +226,7 @@ err_calan_monomial = abs(psi_ref-psi_calan_monomial); max(err_calan_monomial)
 %     }
 %     gaussWaveFunctionComplex(PsiRef, 0, x0, sqrt(1.0/(mass*omega)), p, gamma, params);
 
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

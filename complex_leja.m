@@ -56,3 +56,7 @@ function [y, idx] = complex_leja (x)
     % Repeated values in x require special handling, which we do not do.
     [y,idx] = complex_leja_no_multiplicities(x, n);
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

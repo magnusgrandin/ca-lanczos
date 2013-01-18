@@ -84,3 +84,7 @@ function [y,idx] = real_leja (x)
     % shifts, not the input shifts.  I'll just return it for now...
     [y, idx] = modified_leja(y, n, mults);
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

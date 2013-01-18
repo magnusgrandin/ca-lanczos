@@ -121,3 +121,7 @@ plot((0:size(T_ca_8,1)-1)/(size(T_ca_8,1)-1),sort(eig_T_ca_8),'o','Color',royalb
 plot((0:size(T_ca_10,1)-1)/(size(T_ca_10,1)-1),sort(eig_T_ca_10),'o','Color',orange);
 %plot((0:size(T_ca_20,1)-1)/(size(T_ca_20,1)-1),sort(eig_T_ca_20),'o','Color',salmon);
 title('Spectrum of A');
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

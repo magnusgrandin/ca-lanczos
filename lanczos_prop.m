@@ -58,4 +58,7 @@ function [T,Q,nLanczos] = lanczos_prop(H,r0,maxiter,dt,tol,adaptive)
     T = T(1:nLanczos,:);
     Q = Q(:,1:nLanczos);
 end
-    
+   
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

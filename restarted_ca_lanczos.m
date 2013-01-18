@@ -631,3 +631,7 @@ function omega = reset_omega(omega_in, anorm, s)
         omega(j+1,j+1) = 1;
     end   
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

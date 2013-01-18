@@ -673,3 +673,7 @@ function [V,H] = qrstep(V,H,mu,k1,k2)
 % a complex cojugate pair of eigenvalues
 % 
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

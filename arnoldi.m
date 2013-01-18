@@ -40,3 +40,7 @@ function [Q,H] = arnoldi(A,Q,H,q,maxvecs,prevvecs,orth)
     Q = Q(:,1:nvecs);
 
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

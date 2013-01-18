@@ -389,3 +389,7 @@ function omega = reset_omega(omega_in, n, anorm)
     end
     omega(n+1,n+1) = 1;
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

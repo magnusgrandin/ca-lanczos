@@ -57,3 +57,6 @@ function B_ = newton_basis_matrix (lambda, s, modifiedp)
     end
 end
 
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

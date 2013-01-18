@@ -86,3 +86,7 @@ function [QZ,RZ] = projectAndNormalize(Q,X,doreorth)
         RZ = RY;        
     end
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

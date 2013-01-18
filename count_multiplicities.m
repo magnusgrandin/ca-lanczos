@@ -38,4 +38,6 @@ function [y, multiplicities, num_unique] = count_multiplicities(x, n)
     end
 end    
     
-
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

@@ -50,3 +50,7 @@ function V = matrix_powers_newton(A, v, s, lambda, modifiedp)
         disp(sprintf('Numerical rank of basis (should be %d): %e', s+1, r));
     end
 end % function newton_basis
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

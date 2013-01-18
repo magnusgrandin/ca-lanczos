@@ -89,3 +89,7 @@ function [res_norm] = compute_res_norms(A,Q,T,num_smallest,num_largest)
         nnorms = nnorms+1;
     end
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------

@@ -47,3 +47,7 @@ function Q = randomizeNullSpace(Q,rank)
     [Q(:,nullSpaceColIndices),R_] = tsqr(Q(:,nullSpaceColIndices));
     
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------
