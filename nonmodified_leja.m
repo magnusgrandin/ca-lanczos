@@ -119,3 +119,7 @@ function [y, outidx] = nonmodified_leja(x, n, mults)
     %disp(sprintf('Shifts after Leja ordering:'));
     %y
 end
+
+% -------------------------------------------------------------------------
+%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+% -------------------------------------------------------------------------
