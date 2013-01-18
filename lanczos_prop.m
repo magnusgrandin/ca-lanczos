@@ -1,16 +1,17 @@
-%--------------------------------------------------------------------------
-% The Lanczos algorithm for time integration
-% 
-% Input variables:
-%   H        - hamiltonian
-%   psi      - starting vector for the lanczos iteration
-%   maxiter  - maximum size of the Krylov space
-%   dt       - time step size
+%% function [T,Q,nLanczos] = lanczos_prop(H,r0,maxiter,dt,tol,adaptive)
+
+%   The Lanczos algorithm for time integration
 %   
-% Output variables:
-%   T   - tridiagonal Lanczos matrix
-%   Q   - matrix of Krylov basis vectors
-%--------------------------------------------------------------------------
+%   Input variables:
+%     H        - hamiltonian
+%     psi      - starting vector for the lanczos iteration
+%     maxiter  - maximum size of the Krylov space
+%     dt       - time step size
+%     
+%   Output variables:
+%     T   - tridiagonal Lanczos matrix
+%     Q   - matrix of Krylov basis vectors
+
 function [T,Q,nLanczos] = lanczos_prop(H,r0,maxiter,dt,tol,adaptive)
 
     if nargin < 5

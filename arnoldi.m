@@ -1,3 +1,5 @@
+%% function [Q,H] = arnoldi(A,Q,H,q,maxvecs,prevvecs,orth)
+
 function [Q,H] = arnoldi(A,Q,H,q,maxvecs,prevvecs,orth)
 
     if nargin < 4

@@ -1,3 +1,5 @@
+%% function [Q,R] = cholqr(X)
+
 function [Q,R] = cholqr(X)
 
    G = X'*X;

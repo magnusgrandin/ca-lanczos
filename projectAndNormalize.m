@@ -1,3 +1,5 @@
+%% function [QZ,RZ] = projectAndNormalize(Q,X,doreorth)
+
 function [QZ,RZ] = projectAndNormalize(Q,X,doreorth)
 
     if nargin < 3

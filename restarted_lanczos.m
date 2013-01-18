@@ -1,3 +1,6 @@
+%% function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] =
+%    restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)
+
 % TODO (110530): Remove spurious/repeated eigenvalues in local orth. 
 
 function [conv_eigs,Q_conv,num_restarts,conv_rnorms,orth_err] = restarted_lanczos(A, r, max_lanczos, n_wanted_eigs, orth, tol)

@@ -1,5 +1,4 @@
-%%
-%   function [T,V,rnorm,orthl] = lanczos(A,r0,maxiter,stop,orth)
+%% function [T,V,rnorm,orthl] = lanczos(A,r0,maxiter,stop,orth)
 %
 %   The symmetric Lanczos algorithm
 % 

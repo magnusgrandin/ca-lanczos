@@ -1,3 +1,5 @@
+%%function [X,R] = project(Q,X,doreorth)
+%
 %  Compute the projection of X onto Q
 %
 %     C = Q'*X;  X = X - Q_*C;

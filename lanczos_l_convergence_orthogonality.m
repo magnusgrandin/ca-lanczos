@@ -1,12 +1,13 @@
-%% Run Lanczos and CA-Lanczos on a number of matrices with a number of
-%% orthogonalization strategies, and print the results to corresponding
-%% output text files.
 %%
-%% A few options need to be set:
-%% - output_path: Where to store the result files. Folder must exist.
-%% - matrices_path: Where the matrices (.mat-files) are located.
-%% - orth_strategies: Orthogonalization strategies to run.
-%% - basis: Which basis should be used.
+%  Run Lanczos and CA-Lanczos on a number of matrices with a number of
+%  orthogonalization strategies, and print the results to corresponding
+%  output text files.
+% 
+%  A few options need to be set:
+%  - output_path: Where to store the result files. Folder must exist.
+%  - matrices_path: Where the matrices (.mat-files) are located.
+%  - orth_strategies: Orthogonalization strategies to run.
+%  - basis: Which basis should be used.
 
 output_path = '../results';
 matrices_path = '../matrices';

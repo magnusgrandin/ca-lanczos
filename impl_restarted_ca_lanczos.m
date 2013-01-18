@@ -1,3 +1,6 @@
+%% function [conv_eigs,Q_conv,num_restarts] = 
+%    impl_restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
+
 function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_lanczos, n_wanted_eigs, s, basis, orth, tol)
 
     %% Define constants.

@@ -1,3 +1,5 @@
+%% function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,eigest,adaptive)
+
 function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,eigest,adaptive)
     
     orth = 'local';

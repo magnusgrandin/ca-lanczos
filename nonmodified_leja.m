@@ -1,22 +1,24 @@
-% Compute the (nonmodified) Leja ordering of the n shifts in x.
+%% function [y, outidx] = nonmodified_leja(x, n, mults)
 %
-% Inputs:
-% x: Row vector of shifts for the Newton Krylov basis. 
-%    Elements of x must be unique, but may occur with multiplicities
-%    specified by the "mults" parameter (see below).  Elements of x 
-%    may be complex and may occur in any order.
-% n: Number of (unique) shifts (length of x)
-% mults: mults(j) is the number of occurrences of x(j) in the original
-%        collection of shifts (which this function does not see).
+%   Compute the (nonmodified) Leja ordering of the n shifts in x.
 %
-% Outputs:
-% y: All the elements of x, ordered in the (nonmodified) Leja ordering.
-% outidx: index array such that x(outidx) == y.
+%   Inputs:
+%   x: Row vector of shifts for the Newton Krylov basis. 
+%      Elements of x must be unique, but may occur with multiplicities
+%      specified by the "mults" parameter (see below).  Elements of x 
+%      may be complex and may occur in any order.
+%   n: Number of (unique) shifts (length of x)
+%   mults: mults(j) is the number of occurrences of x(j) in the original
+%          collection of shifts (which this function does not see).
+% 
+%   Outputs:
+%   y: All the elements of x, ordered in the (nonmodified) Leja ordering.
+%   outidx: index array such that x(outidx) == y.
 %
-% NOTE: The order of the complex shifts matters, not for the input here
-% (as it does for the modified Leja ordering), but definitely for the
-% output here.  That means, do NOT take y', because that computes the
-% conjugate transpose.
+%   NOTE: The order of the complex shifts matters, not for the input here
+%   (as it does for the modified Leja ordering), but definitely for the
+%   output here.  That means, do NOT take y', because that computes the
+%   conjugate transpose.
 function [y, outidx] = nonmodified_leja(x, n, mults)
 
     function [y, outidx] = leja_start(x, n)

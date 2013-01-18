@@ -1,23 +1,26 @@
-% Compute the modified Leja ordering of the n shifts in x.
-%
-% Inputs:
-% x: Row vector of shifts for the Newton Krylov basis. 
-%    Elements of x must be unique, but may occur with multiplicities
-%    specified by the "mults" parameter (see below).  Any complex
-%    elements of x must occur in a complex conjugate pair, with the
-%    elements of the pair adjacent, and the member of the pair with 
-%    positive imaginary part occurring first.
-% n: Number of (unique) shifts (length of x)
-% mults: mults(j) is the number of occurrences of x(j) in the original
-%        collection of shifts (which this function does not see).
-%
-% Outputs:
-% y: All the elements of x, ordered in the modified Leja ordering.
-% outidx: index array such that x(outidx) == y.
-%
-% NOTE: x' means the conjugate transpose, which is NOT what you want, as
-% it messes up the order of the complex conjugate pairs in x.  The same
-% thing goes for y; do NOT take y'.
+%% function [y, outidx] = modified_leja(x, n, mults)
+% 
+%   Compute the modified Leja ordering of the n shifts in x.
+%  
+%   Inputs:
+%   x: Row vector of shifts for the Newton Krylov basis. 
+%      Elements of x must be unique, but may occur with multiplicities
+%      specified by the "mults" parameter (see below).  Any complex
+%      elements of x must occur in a complex conjugate pair, with the
+%      elements of the pair adjacent, and the member of the pair with 
+%      positive imaginary part occurring first.
+%   n: Number of (unique) shifts (length of x)
+%   mults: mults(j) is the number of occurrences of x(j) in the original
+%          collection of shifts (which this function does not see).
+%  
+%   Outputs:
+%   y: All the elements of x, ordered in the modified Leja ordering.
+%   outidx: index array such that x(outidx) == y.
+%  
+%   NOTE: x' means the conjugate transpose, which is NOT what you want, as
+%   it messes up the order of the complex conjugate pairs in x.  The same
+%   thing goes for y; do NOT take y'.
+
 function [y, outidx] = modified_leja(x, n, mults)
 
     function bool = is_conj_pair(a, b)

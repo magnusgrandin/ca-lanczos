@@ -1,3 +1,5 @@
+%% function [Q,R,rank] = normalize(X,opt,tol)
+
 function [Q,R,rank] = normalize(X,opt,tol)
 
     if nargin < 2

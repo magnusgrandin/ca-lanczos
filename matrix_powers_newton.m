@@ -1,15 +1,17 @@
-% Return s-step Newton basis with s shifts lambda(1:s) for the given matrix
-% A and starting vector v.  Basis contains s+1 vectors.
+%% function V = matrix_powers_newton(A, v, s, lambda, modifiedp)
 %
-% A: sparse matrix or other data structure suitable for the first
-%    argument of the SpMV function.
-% v: starting vector for the s-step basis
-% s: s-step basis length (returns s+1 vectors)
-% lambda: s approximate eigenvalues to be used as shifts
-% modifiedp: 1 if the modified Leja ordering and corresponding 
-%            modified Newton basis are to be used, else 0.  
-%            Defaults to zero.
-%
+%   Return s-step Newton basis with s shifts lambda(1:s) for the given matrix
+%   A and starting vector v.  Basis contains s+1 vectors. 
+%  
+%   A: sparse matrix or other data structure suitable for the first
+%      argument of the SpMV function.
+%   v: starting vector for the s-step basis
+%   s: s-step basis length (returns s+1 vectors)
+%   lambda: s approximate eigenvalues to be used as shifts
+%   modifiedp: 1 if the modified Leja ordering and corresponding 
+%              modified Newton basis are to be used, else 0.  
+%              Defaults to zero.
+
 function V = matrix_powers_newton(A, v, s, lambda, modifiedp)
     if (nargin < 5)
         modifiedp = 0;

@@ -1,19 +1,20 @@
-%%
-%% Input: a vector of n possibly complex numbers x.  If there are
-%% complex numbers in x, they must occur in complex conjugate pairs.
-%% (We do preprocessing to group complex conjugate pairs.)
-%%
-%% LAPACK's DHSEQR (upper Hessenberg eigenvalue solver) returns the
-%% eigenvalues in the right order so that it shouldn't require such
-%% preprocessing, but Matlab doesn't seem to do this all the time...
-%%
-%% Output: a modified Leja ordering of x.
-%% This ordering is like the Leja ordering, but preserves the adjacency
-%% and order of complex conjugate pairs.
-%%
-%% Note: the Leja ordering of a set of points is not unique, so we cannot
-%% expect the modified Leja ordering to be unique either.
-%%
+%% function [y,idx] = real_leja (x)
+%
+%   Input: a vector of n possibly complex numbers x.  If there are
+%   complex numbers in x, they must occur in complex conjugate pairs.
+%   (We do preprocessing to group complex conjugate pairs.)
+%  
+%   LAPACK's DHSEQR (upper Hessenberg eigenvalue solver) returns the
+%   eigenvalues in the right order so that it shouldn't require such
+%   preprocessing, but Matlab doesn't seem to do this all the time...
+%  
+%   Output: a modified Leja ordering of x.
+%   This ordering is like the Leja ordering, but preserves the adjacency
+%   and order of complex conjugate pairs.
+%  
+%   Note: the Leja ordering of a set of points is not unique, so we cannot
+%   expect the modified Leja ordering to be unique either.
+
 function [y,idx] = real_leja (x)
 
     % Make sure x is a row vector.  Don't take x = x', because if there

@@ -1,15 +1,15 @@
-% Function [T,Q] = sstep_lanczos_prop(H,r0,s,m,dt)
-% 
-% Input:
-%    H    - Hamiltonian matrix
-%    psi  - Wavefunction to propagate
-%    dt   - Time step
-%    s    - Number of simultaneous Lanczos steps
-%    m    - Number of outer iterations
-%
-% Output:
-%    T    - Tri-diagonal Lanczos matrix
-%    v    - Krylov subspace
+%% function [T,Q,lsteps]= sstep_lanczos_prop(H,r0,s,m,dt,tol)
+%   
+%   Input:
+%      H    - Hamiltonian matrix
+%      psi  - Wavefunction to propagate
+%      dt   - Time step
+%      s    - Number of simultaneous Lanczos steps
+%      m    - Number of outer iterations
+%  
+%   Output:
+%      T    - Tri-diagonal Lanczos matrix
+%      v    - Krylov subspace
 
 function [T,Q,lsteps]= sstep_lanczos_prop(H,r0,s,m,dt,tol)
     N = length(r0);

@@ -1,5 +1,7 @@
-% x: length n vector of numbers
-% n: number of elements in x
+%% function [y, multiplicities, num_unique] = count_multiplicities(x, n)
+
+%   x: length n vector of numbers
+%   n: number of elements in x
 function [y, multiplicities, num_unique] = count_multiplicities(x, n)
 
     % Matlab's "unique", just like Matlab's "sort", sorts complex numbers by

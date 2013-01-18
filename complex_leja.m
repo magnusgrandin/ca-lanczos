@@ -1,12 +1,13 @@
-%%
-%% Given a vector of complex numbers x, compute a Leja ordering of x:
-%% return a vector y and a permutation array idx such that x(idx) = y
-%% is the Leja ordering of x.
-%%
-%% Note: the Leja ordering of a set of points is not unique:  see e.g.
-%% Baglama, Calvetti and Reichel:  "Fast Leja points", ETNA, Vol. 7,
-%% 1998, pp. 124-140.
-%%
+%% function [y, idx] = complex_leja (x)
+%
+%   Given a vector of complex numbers x, compute a Leja ordering of x:
+%   return a vector y and a permutation array idx such that x(idx) = y
+%   is the Leja ordering of x.
+%  
+%   Note: the Leja ordering of a set of points is not unique:  see e.g.
+%   Baglama, Calvetti and Reichel:  "Fast Leja points", ETNA, Vol. 7,
+%   1998, pp. 124-140.
+%
 function [y, idx] = complex_leja (x)
 
     function [y,idx] = complex_leja_no_multiplicities(x, n)

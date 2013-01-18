@@ -1,25 +1,25 @@
-%   function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
+%% function [T,Q,rnorm,orthl] = ca_lanczos(A,r,s,t,basis,stop,orth)
 %   
-%   Communication avoiding Lanczos algorithm, as described in 
-%   M. Hoemmen, Communication-Avoiding Krylov Subspace Methods, PhD thesis,
-%   University of California Berkeley (2010).
-%   
-%   Input:
-%     A     - the large sparse symmetric matrix
-%     r     - initial vector
-%     s     - SpMV kernel step size
-%     t     - number of iterations (restart length = s*t)
-%     basis - basis to use {'monomial'|'newton'}
-%     stop  - flag to tell whether we should stop on convergence of first
-%             Ritz-pair (optional) {0|1}
-%     orth  - orthogonalization strategy to use (optional)
-%             {'local'|'full'|'periodic'|'select'}
-%     
-%   Output:
-%     T     - Lanczos projection matrix [(s*t) x (s*t)]
-%     Q     - basis vectors [n x (s*t)]
-%     rnorm - vector of the residual norms in each iteration (optional)
-%     orthl - vector of level of orthogonality in each iteration (optional)
+%    Communication avoiding Lanczos algorithm, as described in 
+%    M. Hoemmen, Communication-Avoiding Krylov Subspace Methods, PhD thesis,
+%    University of California Berkeley (2010).
+%    
+%    Input:
+%      A     - the large sparse symmetric matrix
+%      r     - initial vector
+%      s     - SpMV kernel step size
+%      t     - number of iterations (restart length = s*t)
+%      basis - basis to use {'monomial'|'newton'}
+%      stop  - flag to tell whether we should stop on convergence of first
+%              Ritz-pair (optional) {0|1}
+%      orth  - orthogonalization strategy to use (optional)
+%              {'local'|'full'|'periodic'|'select'}
+%      
+%    Output:
+%      T     - Lanczos projection matrix [(s*t) x (s*t)]
+%      Q     - basis vectors [n x (s*t)]
+%      rnorm - vector of the residual norms in each iteration (optional)
+%      orthl - vector of level of orthogonality in each iteration (optional)
 %
 function [T,Q,ritz_rnorm,orth_err] = ca_lanczos(A,r,s,iter,basis,orth)
 

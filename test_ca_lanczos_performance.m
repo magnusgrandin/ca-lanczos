@@ -1,3 +1,5 @@
+%% function test_ca_lanczos_performance(matrix, steps)
+
 function test_ca_lanczos_performance(matrix, steps)
 
 % Load matrix

@@ -1,13 +1,15 @@
-%%% Compute the (s+1) x s matrix $\underline{B}$ such that for the
-%%% Newton basis $V_{s+1}$, $A V_s = V_{s+1} \underline{B}$.
-%%%
-%%% lambda:  Newton basis parameters
-%%% s:       basis size 
-%%% modifiedp: 1 if the modified Leja ordering and corresponding 
-%%%            modified Newton basis are to be used, else 0.  
-%%%            Defaults to zero.
-%%% B_:      $\underline{B}$
-%%%
+%% function B_ = newton_basis_matrix (lambda, s, modifiedp)
+%
+%   Compute the (s+1) x s matrix $\underline{B}$ such that for the
+%   Newton basis $V_{s+1}$, $A V_s = V_{s+1} \underline{B}$.
+%  
+%   lambda:  Newton basis parameters
+%   s:       basis size 
+%   modifiedp: 1 if the modified Leja ordering and corresponding 
+%              modified Newton basis are to be used, else 0.  
+%              Defaults to zero.
+%   B_:      $\underline{B}$
+
 function B_ = newton_basis_matrix (lambda, s, modifiedp)
     if (nargin < 3)
         modifiedp = 0;
