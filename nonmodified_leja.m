@@ -53,9 +53,11 @@ function [y, outidx] = nonmodified_leja(x, n, mults)
 
                     % Update the capacity estimate.
                     y_last = y(num_points);
-                    capacity = prod( abs(y_last - x(outidx(1:num_points-1))) ...
-                                     .^ (mults(outidx(1:num_points-1)) * ...
+                    for i = 1:num_points-1
+                        capacity = prod( abs(y_last - x(outidx(i))) ...
+                                     .^ (mults(outidx(i)) * ...
                                          (1.0/num_points)) );
+                    end
                     % Unscale all the shifts by the old capacity
                     % estimate, and rescale by the new capacity estimate.
                     % We do this all at once to avoid overflow on
@@ -63,7 +65,7 @@ function [y, outidx] = nonmodified_leja(x, n, mults)
                     x = x ./ (capacity / old_capacity);
                     y = y ./ (capacity / old_capacity);
 
-                    disp(sprintf('New capacity estimate: %e', capacity));
+                    %disp(sprintf('New capacity estimate: %e', capacity));
                 end
             end
             zprod = zeros(n,1);
@@ -74,11 +76,13 @@ function [y, outidx] = nonmodified_leja(x, n, mults)
                 % capacity, in order to avoid overflow (which was
                 % observed in practice when no scaling was done, for the
                 % modified Leja ordering at least).
-                zprod(count) = ...
-                    prod( (abs(x(j) - x(outidx)) ./ capacity) .^ mults(outidx) );
+                for i = 1:num_points
+                    zprod(count) = ...
+                        prod( (abs(x(j) - x(outidx(i)) ./ capacity) .^ mults(outidx(i))) );
+                end
             end
             [max_zprod, k] = max( zprod(1:count) );
-            disp(sprintf('New max(zprod): %e', max_zprod));
+            %disp(sprintf('New max(zprod): %e', max_zprod));
             j = inidx(k);
             % A zero maximum indicates either that there are multiple
             % shifts, or that the product underflowed.  An Inf maximum
@@ -101,8 +105,8 @@ function [y, outidx] = nonmodified_leja(x, n, mults)
         end
     end
 
-    disp(sprintf('Shifts before Leja ordering:'));
-    x
+    %disp(sprintf('Shifts before Leja ordering:'));
+    %x
         
     [y, outidx] = leja_start(x, n);
     inidx = setdiff(1:n, outidx);
@@ -112,6 +116,6 @@ function [y, outidx] = nonmodified_leja(x, n, mults)
     % Unscale the computed Leja points by the capacity estimate.
     y = y .* capacity;
 
-    disp(sprintf('Shifts after Leja ordering:'));
-    y
+    %disp(sprintf('Shifts after Leja ordering:'));
+    %y
 end

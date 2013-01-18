@@ -1,72 +1,63 @@
-numTimeSteps = 100;
+numTimeSteps = 200;
 numLanczosSteps = 24;
 numRestarts = 1;
-s =6;
-N=256; dt=0.1;
+s = 6;
+N=512; dt=0.025;
 t=dt:dt:numTimeSteps*dt;
 e=ones(N,1);
 range=[-10 10];
 h=1/N*(range(2)-range(1));
 x=range(1)+h/2:h:range(2)-h/2;
 
-w=1.0; m=0;
-T=0; D=10.90240 ; alpha=0.3; xe=8;
-displ = 2;
+w=0.5; m=1;
+displ = 4;
 
 H = sparse(1:N, [2:N 1], 4*e/3, N, N) - sparse(1:N, [3:N 1 2], e/12, N, N);
 H = (H + H') - sparse(1:N, 1:N, 5*e/2, N, N);
 H=-H/(2*(h^2));
 H=H + sparse(1:N, 1:N, 0.5*x.^2, N, N);
-%H=H + sparse(1:N, 1:N, T+D*(1.0-exp(-alpha*((x-displ)-xe).^2)), N, N);
 
-%psi(:,1) = (1.0/(w*sqrt(2*pi))) * exp(-0.5*((x-m)/w).^2)';
-%psi(:,1) = 6*(1.0/(w*sqrt(2*pi))) * exp(-0.5*((x-m)/w).^2)';
-psi = (1/(pi*w^2))^(1/4)*exp(-0.5*(((x-displ)/w).^2))';
-%psi(:,1) = exp(-(20*(x-m)).^2)';
-%psi = psi/norm(psi);
+psi = (1/(pi*w^2))^(1/4)*exp(-0.5*(((x-displ)/w).^2));
+psi = psi';
+
+tf = numTimeSteps*dt;
+x0 = cos(w*tf)*displ;
+p = -m*w*sin(w*tf)*displ;
+g = -0.5*(m*w*displ^2*cos(w*tf)*sin(w*tf) + w*tf);
+sigma = 1/sqrt(m*w);
+%psi_ref = (1/(pi*w^2))^(1/4)*exp(-0.5*((x-x0)/sigma).^2).*(cos(p*(x-x0)+g)-1i*sin(p*(x-x0)+g));
+%psi_ref = psi_ref';
+psi_ref = expm(-1i*tf*H)*psi;
 
 eig_refnc = zeros(numLanczosSteps,1);
 
 smalleig_err_stlan = zeros(numTimeSteps,1);
-smalleig_err_calan = zeros(numTimeSteps,1);
-smalleig_err_sslan = zeros(numTimeSteps,1);
+smalleig_err_calan_newton = zeros(numTimeSteps,1);
+smalleig_err_calan_monomial = zeros(numTimeSteps,1);
+%smalleig_err_sslan = zeros(numTimeSteps,1);
 largeeig_err_stlan = zeros(numTimeSteps,1);
-largeeig_err_calan = zeros(numTimeSteps,1);
-largeeig_err_sslan = zeros(numTimeSteps,1);
+largeeig_err_calan_newton = zeros(numTimeSteps,1);
+largeeig_err_calan_monomial = zeros(numTimeSteps,1);
+%largeeig_err_sslan = zeros(numTimeSteps,1);
 
 psi_refnc = zeros(N,numTimeSteps+1);
 psi_stlan = zeros(N,numTimeSteps+1);
-psi_calan = zeros(N,numTimeSteps+1);
-psi_sslan = zeros(N,numTimeSteps+1);
-psi_refnc(:,1) = psi;
-psi_stlan(:,1) = psi;
-psi_calan(:,1) = psi;
-psi_sslan(:,1) = psi;
+psi_calan_newton = zeros(N,numTimeSteps+1);
+psi_calan_monomial = zeros(N,numTimeSteps+1);
+%psi_sslan = zeros(N,numTimeSteps+1);
+psi_refnc = psi;
+psi_stlan = psi;
+psi_calan_newton = psi;
+psi_calan_monomial = psi;
+%psi_sslan = psi;
 
-%for 2:numTimeSteps+1
-    % Reference solution
-%    opts.isreal = 0;
-%    opts.issym  = 1;
-%    opts.disp   = 0;
-%    opts.v0     = psi_refnc(:,k-1);
-%    opts.maxit  = numLanczosSteps;
-%    opts.p      = numLanczosSteps+1;
-%    [V,D] = eigs(H,numLanczosSteps,0,opts);
-%    psi_refnc(:,k) = V*(expm(-1i*dt*D)*(V'*psi_refnc(:,k-1)));
-%    eig_refnc = diag(D);
-    %psi_refnc(:,k) = expm(-1i*dt*H) * psi_refnc(:,k-1);
-%end
-
-% Reference eigenvalues
-eig_refnc = eig(H);
-
-% Reference solution: Matrix exponential
+% Reference solution: Propagated matrix exponential
 %disp('Reference solution.');
 %time_refnc = cputime;
-%for k=2:numTimeSteps+1
-%    psi_refnc(:,k) = expm(-1i*dt*H) * psi_refnc(:,k-1);
-%    fprintf('.');
-%end
+% for k=2:numTimeSteps+1
+%     psi_refnc = expm(-1i*dt*H) * psi_refnc;
+%     fprintf('.');
+% end
 %fprintf('\n');
 %time_refnc = cputime-time_refnc;
 
@@ -74,11 +65,13 @@ eig_refnc = eig(H);
 disp('Standard Lanczos.');
 tic;
 for k=2:numTimeSteps+1
-    [T,Q] = lanczos_prop(H, psi_stlan(:,k-1), numLanczosSteps, dt, 1.0e-10, true);
-    [V,D]=eig(T);
+    [T,Q] = lanczos_prop(H, psi_stlan, numLanczosSteps, dt, 1.0e-10, false);
     nLanczos = size(T,1);
-    psi_stlan(:,k) = ...
-        Q*(V*(expm(-1i*dt*D)*(V'*(eye(nLanczos,1)*norm(psi_stlan(:,k-1))))));
+    [V,D]=eig(T);
+    %psi_stlan = ...
+    %    Q*(V*(expm(-1i*dt*D)*(V'*(eye(nLanczos,1)*norm(psi_stlan)))));
+    psi_stlan = ...
+        Q*(expm(-1i*dt*T)*(eye(nLanczos,1)*norm(psi_stlan)));
     eig_stlan = diag(D);
     n_stlan = nLanczos;
     T_stlan = T;
@@ -89,64 +82,95 @@ end
 time_stlan = toc;
        
 % CA-Lanczos
-disp('CA-Lanczos.');
+disp('CA-Lanczos, newton basis.');
 tic;
-for k=2:numTimeSteps+1
-    [T,Q] = ca_lanczos_prop(H, psi_calan(:,k-1), s, numLanczosSteps/s, dt, 1.0e-10,'newton', true);
+% Take first step with regular Lanczos to get inital eigenvalue estimate
+[T,Q] = lanczos_prop(H, psi_calan_newton, numLanczosSteps, dt, 1.0e-10, false);
+[V,D] = eig(T);
+nLanczos = size(T,1);
+psi_calan_newton = ...
+    Q*(expm(-1i*dt*T)*(eye(nLanczos,1)*norm(psi_calan_newton)));
+eigest = diag(D);
+%eigest = [];
+for k=3:numTimeSteps+1
+    [T,Q] = ca_lanczos_prop(H, psi_calan_newton, s, numLanczosSteps/s, dt, 1.0e-10,'newton',eigest,false);
     [V,D] = eig(T);
-    % Investigate whether or not we should use the inverse or
-    % the complex conjugate    |  here
-    %                          V  
+    %eigest = diag(D);
     nLanczos = size(T,1);
-    psi_calan(:,k) = ...
-        Q*(V*(expm(-1i*dt*D)*(V\(eye(nLanczos,1)*norm(psi_calan(:,k-1))))));
-    eig_calan = diag(D);
-    n_calan = nLanczos;
-    T_calan = T;
-    Q_calan = Q;
-    V_calan = V;
-    D_calan = D;
+    %psi_calan_newton = ...
+    %    Q*(V*(expm(-1i*dt*D)*(V\(eye(nLanczos,1)*norm(psi_calan_newton)))));
+    psi_calan_newton = ...
+        Q*(expm(-1i*dt*T)*(eye(nLanczos,1)*norm(psi_calan_newton)));
+    eig_calan_newton = diag(D);
+    n_calan_newton = nLanczos;
+    T_calan_newton = T;
+    Q_calan_newton = Q;
+    V_calan_newton = V;
+    D_calan_newton = D;
 end
-time_calan = toc;
+time_calan_newton = toc;
 
-% s-Step Lanczos
-disp('s-step Lanczos.');
+% CA-Lanczos
+disp('CA-Lanczos, monomial basis.');
 tic;
 for k=2:numTimeSteps+1
-    [T,Q] = sstep_lanczos_prop(H, psi_sslan(:,k-1), s, numLanczosSteps/s, dt, 1.0e-10);
-%    [T,Q] = sStepLanczos(H, psi_sslan(:,k-1), s, numLanczosSteps/s);
-%    nLanczos = numLanczosSteps;
-    [V,D] = eig(T);
+    [T,Q] = ca_lanczos_prop(H, psi_calan_monomial, s, numLanczosSteps/s, dt, 1.0e-10,'monomial',eigest,false);
     nLanczos = size(T,1);
-    psi_sslan(:,k) = ...
-        Q*(V*(expm(-1i*dt*D)*(V\(norm(psi_sslan(:,k-1))*eye(nLanczos,1)))));
-    eig_sslan = diag(D);
-    n_sslan = nLanczos;
-    T_sslan = T;
-    Q_sslan = Q;
-    V_sslan = V;
-    D_sslan = D;
+    [V,D] = eig(T);
+    %psi_calan_monomial = ...
+    %    Q*(V*(expm(-1i*dt*D)*(V\(eye(nLanczos,1)*norm(psi_calan_monomial)))));
+    psi_calan_monomial = ...
+        Q*(expm(-1i*dt*T)*(eye(nLanczos,1)*norm(psi_calan_monomial)));
+    eig_calan_monomial = diag(D);
+    n_calan_monomial = nLanczos;
+    T_calan_monomial = T;
+    Q_calan_monomial = Q;
+    V_calan_monomial = V;
+    D_calan_monomial = D;
 end
-time_sslan = toc;
+time_calan_monomial = toc;
+
+% % s-Step Lanczos
+% disp('s-step Lanczos.');
+% tic;
+% for k=2:numTimeSteps+1
+%     [T,Q] = sstep_lanczos_prop(H, psi_sslan, s, numLanczosSteps/s, dt, 1.0e-10);
+% %    [T,Q] = sStepLanczos(H, psi_sslan(:,k-1), s, numLanczosSteps/s);
+% %    nLanczos = numLanczosSteps;
+%     [V,D] = eig(T);
+%     nLanczos = size(T,1);
+%     psi_sslan = ...
+%         Q*(V*(expm(-1i*dt*D)*(V\(norm(psi_sslan)*eye(nLanczos,1)))));
+%     eig_sslan = diag(D);
+%     n_sslan = nLanczos;
+%     T_sslan = T;
+%     Q_sslan = Q;
+%     V_sslan = V;
+%     D_sslan = D;
+% end
+% time_sslan = toc;
 
 % Plot eigenvalues on the interval [0 1]
-figure(1); hold on;
-for k=2:numTimeSteps+1
-    plot((0:N-1)/(N-1), sort(eig_refnc, 'descend'), 'k-');
-    plot((0:n_stlan-1)/(n_stlan-1),sort(real(eig_stlan),'descend'),'rs');
-    plot((0:n_calan-1)/(n_calan-1),sort(real(eig_calan),'descend'),'bo');
-    plot((0:n_sslan-1)/(n_sslan-1),sort(real(eig_sslan),'descend'),'g*');
-    
-    legend('Reference','Lanczos','CA-Lanczos','s-step Lanczos'); %'s-Step Lanczos'
-     
-     % Compute errors in eigenvalues
-     smalleig_err_stlan(k) = abs(min(abs(eig_refnc)) - min(abs(eig_stlan)));
-     smalleig_err_calan(k) = abs(min(abs(eig_refnc)) - min(abs(eig_calan)));
-     smalleig_err_sslan(k) = abs(min(abs(eig_refnc)) - min(abs(eig_sslan)));
-     largeeig_err_stlan(k) = abs(max(abs(eig_refnc)) - max(abs(eig_stlan)));
-     largeeig_err_calan(k) = abs(max(abs(eig_refnc)) - max(abs(eig_calan)));
-     largeeig_err_sslan(k) = abs(max(abs(eig_refnc)) - max(abs(eig_sslan)));
- end
+figure; hold on;
+
+%plot((0:N-1)/(N-1), sort(eig_refnc, 'descend'), 'k-');
+plot((0:n_stlan-1)/(n_stlan-1),sort(real(eig_stlan),'descend'),'rs');
+plot((0:n_calan_newton-1)/(n_calan_newton-1),sort(real(eig_calan_newton),'descend'),'bo');
+plot((0:n_calan_monomial-1)/(n_calan_monomial-1),sort(real(eig_calan_monomial),'descend'),'g^');
+%plot((0:n_sslan-1)/(n_sslan-1),sort(real(eig_sslan),'descend'),'m*');
+
+legend('Lanczos','CA-Lanczos (newton)','CA-Lanczos (monomial)'); %'s-Step Lanczos'
+
+% Compute errors in eigenvalues
+smalleig_err_stlan(k) = abs(min(abs(eig_refnc)) - min(abs(eig_stlan)));
+smalleig_err_calan_newton(k) = abs(min(abs(eig_refnc)) - min(abs(eig_calan_newton)));
+smalleig_err_calan_monomial(k) = abs(min(abs(eig_refnc)) - min(abs(eig_calan_monomial)));
+%smalleig_err_sslan(k) = abs(min(abs(eig_refnc)) - min(abs(eig_sslan)));
+largeeig_err_stlan(k) = abs(max(abs(eig_refnc)) - max(abs(eig_stlan)));
+largeeig_err_calan_newton(k) = abs(max(abs(eig_refnc)) - max(abs(eig_calan_newton)));
+largeeig_err_calan_monomial(k) = abs(max(abs(eig_refnc)) - max(abs(eig_calan_monomial)));
+%largeeig_err_sslan(k) = abs(max(abs(eig_refnc)) - max(abs(eig_sslan)));
+
 %disp('Matrix exponential:');
 %disp(['Execution time:                ', num2str(time_refnc)]);
 disp('Standard Lanczos:');
@@ -154,34 +178,40 @@ disp(['Execution time:                ', num2str(time_stlan)]);
 disp(['Number of Lanczos iterations:  ', num2str(n_stlan)]);
 disp(['Error in smallest eigenvalue:  ', num2str(max(smalleig_err_stlan))]);
 disp(['Error in largest eigenvalue:   ', num2str(max(largeeig_err_stlan))]);
-disp('CA-Lanczos:');
-disp(['Execution time:                ', num2str(time_calan)]);
-disp(['Number of Lanczos iterations:  ', num2str(n_calan)]);
-disp(['Error in smallest eigenvalue:  ', num2str(max(smalleig_err_calan))]);
-disp(['Error in largest eigenvalue:   ', num2str(max(largeeig_err_calan))]);
-disp('s-Step Lanczos:');
-disp(['Execution time:                ', num2str(time_sslan)]);
-disp(['Number of Lanczos iterations:  ', num2str(n_sslan)]);
-disp(['Error in smallest eigenvalue:  ', num2str(max(smalleig_err_sslan))]);
-disp(['Error in largest eigenvalue:   ', num2str(max(largeeig_err_sslan))]);
+disp('CA-Lanczos, newton basis:');
+disp(['Execution time:                ', num2str(time_calan_newton)]);
+disp(['Number of Lanczos iterations:  ', num2str(n_calan_newton)]);
+disp(['Error in smallest eigenvalue:  ', num2str(max(smalleig_err_calan_newton))]);
+disp(['Error in largest eigenvalue:   ', num2str(max(largeeig_err_calan_newton))]);
+disp('CA-Lanczos, monomial basis:');
+disp(['Execution time:                ', num2str(time_calan_monomial)]);
+disp(['Number of Lanczos iterations:  ', num2str(n_calan_monomial)]);
+disp(['Error in smallest eigenvalue:  ', num2str(max(smalleig_err_calan_monomial))]);
+disp(['Error in largest eigenvalue:   ', num2str(max(largeeig_err_calan_monomial))]);
+%disp('s-Step Lanczos:');
+%disp(['Execution time:                ', num2str(time_sslan)]);
+%disp(['Number of Lanczos iterations:  ', num2str(n_sslan)]);
+%disp(['Error in smallest eigenvalue:  ', num2str(max(smalleig_err_sslan))]);
+%disp(['Error in largest eigenvalue:   ', num2str(max(largeeig_err_sslan))]);
 
 figure;
 subplot(1,3,1);
-plot(x, real(psi_stlan(:,1)), x, imag(psi_stlan(:,1)), ...
-     x, real(psi_stlan(:,numTimeSteps+1)), x, imag(psi_stlan(:,numTimeSteps+1)), ...
-     x, abs(psi_stlan(:,numTimeSteps+1)));
-legend('Re(\Psi_{0})', 'Im(\Psi_{0})', 'Re(\Psi_{k})', 'Im(\Psi_{k})', 'abs(\Psi_{k})');
+plot(x, real(psi_stlan), x, imag(psi_stlan), x, abs(psi_stlan));
+legend('Re(\Psi_{k})', 'Im(\Psi_{k})', 'abs(\Psi_{k})');
 subplot(1,3,2);
-plot(x, real(psi_calan(:,1)), x, imag(psi_calan(:,1)), ...
-     x, real(psi_calan(:,numTimeSteps+1)), x, imag(psi_calan(:,numTimeSteps+1)), ...
-     x, abs(psi_calan(:,numTimeSteps+1)));
-legend('Re(\Psi_{0})', 'Im(\Psi_{0})', 'Re(\Psi_{k})', 'Im(\Psi_{k})', 'abs(\Psi_{k})');
+plot(x, real(psi_calan_newton), x, imag(psi_calan_newton), x, abs(psi_calan_newton));
+legend('Re(\Psi_{k})', 'Im(\Psi_{k})', 'abs(\Psi_{k})');
 subplot(1,3,3);
-plot(x, real(psi_sslan(:,1)), x, imag(psi_sslan(:,1)), ...
-     x, real(psi_sslan(:,numTimeSteps+1)), x, imag(psi_sslan(:,numTimeSteps+1)), ...
-     x, abs(psi_sslan(:,numTimeSteps+1)));
-legend('Re(\Psi_{0})', 'Im(\Psi_{0})', 'Re(\Psi_{k})', 'Im(\Psi_{k})', 'abs(\Psi_{k})');
-figure;
+plot(x, real(psi_calan_monomial), x, imag(psi_calan_monomial), x, abs(psi_calan_monomial));
+legend('Re(\Psi_{k})', 'Im(\Psi_{k})', 'abs(\Psi_{k})');
+%subplot(1,3,3);
+%plot(x, real(psi_sslan), x, imag(psi_sslan), x, abs(psi_sslan));
+%legend('Re(\Psi_{k})', 'Im(\Psi_{k})', 'abs(\Psi_{k})');
+
+err_stlan = abs(psi_ref-psi_stlan); max(err_stlan)
+err_calan_newton = abs(psi_ref-psi_calan_newton); max(err_calan_newton)
+err_calan_monomial = abs(psi_ref-psi_calan_monomial); max(err_calan_monomial)
+%err_sslan = abs(psi_ref-psi_sslan); max(err_sslan)
 
 %     mass = params.mass[0];
 %     omega = params.potential[0][0].arg[0];

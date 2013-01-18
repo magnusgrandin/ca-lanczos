@@ -121,9 +121,9 @@ function [T,Q,lsteps]= sstep_lanczos_prop(H,r0,s,m,dt,tol)
             [Vp,D] = eig(T(1:s*(k-1),1:s*(k-1)));
             matexp = Vp*expm(-1i*dt*D)/Vp;
             residual = abs(dt*matexp(s*(k-1),1)*norm(P(:,1))*nrm);
-            if residual < tol
-                break;
-            end
+            %if residual < tol
+            %    break;
+            %end
         end
         
         if k < m+1

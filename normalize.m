@@ -4,7 +4,7 @@ function [Q,R,rank] = normalize(X,opt,tol)
         opt = 'None';
     end
     if nargin < 3
-        tol = 1.0e-14;
+        tol = 1.0e-8;
     end
     
     nrows = size(X,1);

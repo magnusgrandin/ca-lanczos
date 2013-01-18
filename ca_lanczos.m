@@ -258,6 +258,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, Bk, iter, s, basis)
     T = [];
     norm_sqrt_eps = normest(A)*sqrt(eps);
     nritz = 0;
+    nbreaks = 0;
     
     Q(:,1) = q;
     
@@ -323,6 +324,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, Bk, iter, s, basis)
             end
         end
         if nritz_new > nritz
+            nbreaks = nbreaks + 1;
             nritz = 0;
             for i = 1:k*s
                 if b(k)*abs(Vp(s*k,i)) < norm_sqrt_eps
@@ -353,7 +355,8 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_selective(A, q, Bk, iter, s, basis)
     Q = Q(:,1:s*k);
     rnorm = rnorm(1:k,:);
     ortherr = ortherr(1:k);
-
+    
+    disp(['--- Number of orthogonalization breaks: ' num2str(nbreaks)]);
 end
          
 
@@ -368,6 +371,7 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, Bk, iter, s, basis)
     T = [];
     omega = [];
     norm_A = normest(A);
+    nbreaks = 0;
 
     Q(:,1) = q;
 
@@ -431,12 +435,13 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, Bk, iter, s, basis)
         err = 0;
         for i = 1:s
             omega_row = omega((k-1)*s+i+1,:);
-            row_err = max(abs(omega_row(1:i)));
+            row_err = max(abs(omega_row(1:(k-1)*s+i)));
             if(row_err > err)
                 err = row_err;
             end
         end
         if err >= sqrt(eps) %norm_A*
+            nbreaks = nbreaks + 1;
             Q(:,(k-1)*s+1:k*s+1) = projectAndNormalize({Q(:,1:(k-1)*s)},Q(:,(k-1)*s+1:k*s+1),true);
             omega = reset_omega(omega, norm_A, s);
         end
@@ -458,6 +463,8 @@ function [Q,T,rnorm,ortherr] = ca_lanczos_periodic(A, q, Bk, iter, s, basis)
     Q = Q(:,1:s*k);
     rnorm = rnorm(1:k,:);
     ortherr = ortherr(1:k);
+    
+    disp(['--- Number of orthogonalization breaks: ' num2str(nbreaks)]);
 end
 
 function omega = update_omega(omega_in, alpha, beta, anorm, s)

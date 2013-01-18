@@ -80,10 +80,12 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
         iter = iter+1;
     
         if iter == 1
+            q = Vm(:,1);
             %[Vm,Tm] = lanczos_basic(A,Vm,Tm,q,Bk,m,0,s,basis,orth);            
             [Vm,Tm] = std_lanczos_basic(A,Vm,Tm,q,m,0,orth);            
             %[Vm,Tm] = arnoldi(A,Vm,Tm,q,m,0,orth);            
         else
+            q = Vm(:,k+1);
             %[Vm,Tm] = lanczos_basic(A,Vm,Tm,q,Bk,m,k,s,basis,orth);
             [Vm,Tm] = std_lanczos_basic(A,Vm,Tm,q,m,k,orth);
             %[Vm,Tm] = arnoldi(A,Vm,Tm,q,m,k,orth);
@@ -102,11 +104,11 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
             end
         end
         
-        r = Vm(:,nconv+1:m)*Q(nconv+1:m,j+1)*Tm(j+1,j) + r*Q(m,j);
-        Vm(:,nconv+1:j) = Vm(:,nconv+1:m)*Q(nconv+1:m,nconv+1:j);
+        r = Vm(:,k+1:m)*Q(k+1:m,+1)*Tm(j+1,j) + r*Q(m,j);
+        Vm(:,nconv+1:k) = Vm(:,nconv+1:m)*Q(nconv+1:m,nconv+1:k);
         bk = sqrt(r'*r);
-        Vm(:,j+1) = (1/bk)*r;
-        Tm(j+1,j) = bk;
+        Vm(:,k+1) = (1/bk)*r;
+        Tm(k+1,k) = bk;
 
         % TODO: deflation.
         % 1. Initially, lock Ritz values as they converge until k values have been locked
@@ -141,9 +143,9 @@ function [conv_eigs,Q_conv,num_restarts] = impl_restarted_ca_lanczos(A, r, max_l
             end
         end
         if j > 0
-            disp('Deflate.');
-            [Vm,Tm] = deflate(Vm,Tm,Y,nconv);
-            nconv = nconv+j;
+            %disp('Deflate.');
+            %[Vm,Tm] = deflate(Vm,Tm,Y,nconv);
+            %nconv = nconv+j;
         end
         if nconv >= n_wanted_eigs
             restart = false;

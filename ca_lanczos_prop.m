@@ -1,5 +1,7 @@
-function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
+function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,eigest,adaptive)
     
+    orth = 'local';
+
     if nargin < 6
         tol = 1.0e-10;
     end
@@ -24,15 +26,21 @@ function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
         I = eye(s+1);
         Bk = I(:,2:s+1);        
     elseif strcmpi(basis,'newton')
-        % Run standard Lanczos for 2s steps
-        T = lanczos(A,r0,2*s,tol);
-        basis_eigs = eig(T);
-        basis_shifts = leja(real(basis_eigs),'nonmodified');
-        Bk = newton_basis_matrix(basis_shifts,s,1);
+        if isempty(eigest)
+            % Run standard Lanczos for 2s steps
+            T = lanczos(A,r0,2*s,'local');
+            basis_eigs = eig(T);
+        else
+            %sorted_eigs = sort(eigest,'ascend');
+            %basis_eigs = sorted_eigs(1:s);
+            basis_eigs = eigest;
+        end
+        basis_shifts = leja(real(basis_eigs));
+        Bk = newton_basis_matrix(basis_shifts,s,0);
     else
         disp(['ERROR: Unknown basis', basis]);
     end
-    
+        
     hasConverged = false;
     k = 0;
 
@@ -49,12 +57,12 @@ function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
             V(:,1) = q;
             V(:,2:s+1) = matrix_powers_monomial(A, q, s);
         elseif strcmpi(basis,'newton')
-            V(:,1:s+1) = matrix_powers_newton(A, q, s, basis_shifts,1);
+            V(:,1:s+1) = matrix_powers_newton(A, q, s, basis_shifts,0);
         end
         
         if k == 1
-            % QR factorization
-            [Q{1},Rk] = tsqr(V(:,1:s+1));
+            % Orthogonalize initial basis vectors
+            [Q{1},Rk] = normalize(V(:,1:s+1));
             
             % Compute first part of tridiagonal matrix
             T = Rk*Bk/Rk(1:s,1:s);
@@ -63,10 +71,18 @@ function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
             b(k) = T(s+1,s);
             
         else
-            % Orthogonality against previous block of basis vectors
-            Rkk_s = Q{k-1}'*V(:,2:s+1);
-            V(:,2:s+1) = V(:,2:s+1) - Q{k-1}*Rkk_s;
-            [Q_,Rk_s] = tsqr(V(:,2:s+1));
+            if strcmpi(orth,'local')
+                % Orthogonalize against previous block of basis vectors
+                [Q_,Rk_] = projectAndNormalize({Q{k-1}},V(:,2:s+1),false);
+                Rkk_s = Rk_{1};
+                Rk_s = Rk_{2};
+            elseif strcmpi(orth,'fro')
+                % Orthogonality against all previous basis vectors                
+                [Q_,Rk_] = projectAndNormalize({Q{k-1}},V(:,2:s+1),false);
+                Rkk_s = Rk_{1};
+                Rk_s = Rk_{2};
+                Q_ = projectAndNormalize({Q{1:k-1}},Q_);
+            end
             Q{k} = [Q{k-1}(:,s+1) Q_(:,1:s)];
             Q{k-1} = Q{k-1}(:,1:s);
             
@@ -99,18 +115,17 @@ function [T,Q,lsteps] = ca_lanczos_prop(A,r0,s,m,dt,tol,basis,adaptive)
         
         % Compute the residual and stop iterations if tolerance,
         % fulfilled if adaptive flag is set.
-        if (k*s >= 3) && (adaptive == true)
-            [Vp,D] = eig(T(1:k*s,1:k*s));
-            matexp = Vp*expm(-1i*dt*D)*Vp';
-            residual = abs(dt*b(k)*matexp(k*s,1)*nrm);
-            if residual < tol
-                disp(num2str(residual));
-                hasConverged = true;
-                break;
-            end
+        %[Vp,D] = eig(T(1:k*s,1:k*s));
+        %matexp = Vp*expm(-1i*dt*D)*Vp';
+        matexp = expm(-1i*dt*T(1:k*s,1:k*s));
+        residual = abs(dt*b(k)*matexp(k*s,1)*nrm);
+        if (residual < tol) && (k*s >= 3) && (adaptive == true)
+            disp(num2str(residual));
+            hasConverged = true;
+            break;
         end
     end
-    disp(num2str(residual));    
+    disp(['Residual: ', num2str(residual)]);
     lsteps = k*s;
     T = real(T(1:lsteps,1:lsteps));
     Q_ = Q{k};

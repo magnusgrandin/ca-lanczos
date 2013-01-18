@@ -147,6 +147,7 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A,q,maxiter)
     norm_A = normest(A);
     norm_sqrt_eps = norm_A*sqrt(eps);
     nritz = 0;
+    nbreaks = 0;
     
     has_converged = false;
     j = 1;
@@ -170,6 +171,7 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A,q,maxiter)
             end
         end
         if nritz_new > nritz
+            nbreaks = nbreaks + 1;
             nritz = 0;
             for i = 1:j
                 if beta(i)*abs(Vp(j,i)) < norm_sqrt_eps
@@ -201,6 +203,8 @@ function [Q,T,rnorm,ortherr] = lanczos_selective(A,q,maxiter)
     T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
     rnorm = rnorm(1:j-1,:);
     ortherr = ortherr(1:j-1);
+    
+    disp(['--- Number of orthogonalization breaks: ' num2str(nbreaks)]);
 end
    
 function [Q,T,rnorm,ortherr] = lanczos_periodic(A,q,maxiter)
@@ -214,6 +218,7 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A,q,maxiter)
     ortherr = zeros(maxiter,1);
     omega = [];
     norm_A = normest(A);
+    nbreaks = 0;
     
     has_converged = false;
     j = 1;
@@ -243,9 +248,10 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A,q,maxiter)
         % Estimate orthogonalization error, reorthogonalize if necessary
         omega = update_omega(omega, j, alpha, beta, norm_A);
         %err = max(max(abs(omega - eye(size(omega)))));
-        err = max(max(abs(omega(j+1,1:j))));
+        err = max(abs(omega(j+1,1:j)));
         if err >= sqrt(eps) %/j
-            Q(:,j:j+1) = projectAndNormalize({Q(:,1:j-1)},Q(:,j:j+1),true);
+            nbreaks = nbreaks + 1;
+            Q(:,j-5:j+1) = projectAndNormalize({Q(:,1:j-6)},Q(:,j-5:j+1),true);
             omega = reset_omega(omega, j, norm_A);
         end
         
@@ -255,6 +261,8 @@ function [Q,T,rnorm,ortherr] = lanczos_periodic(A,q,maxiter)
     T = diag(alpha(1:j-1)) + diag(beta(1:j-2),1) + diag(beta(1:j-2),-1);
     rnorm = rnorm(1:j-1,:);
     ortherr = ortherr(1:j-1);
+    
+    disp(['--- Number of orthogonalization breaks: ' num2str(nbreaks)]);
 end
 
 function omega = update_omega(omega_in, n, alpha, beta, anorm)
@@ -296,7 +304,9 @@ function omega = reset_omega(omega_in, n, anorm)
     omega = omega_in;
     T = eps*anorm;
     for k = 1:n
+        omega(n,k) = T;
         omega(n+1,k) = T;
     end
+    omega(n,n) = 1; omega(n,n+1) = 0;
     omega(n+1,n+1) = 1;
 end
