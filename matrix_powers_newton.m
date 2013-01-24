@@ -54,5 +54,5 @@ function V = matrix_powers_newton(A, v, s, lambda, modifiedp)
 end % function newton_basis
 
 % -------------------------------------------------------------------------
-%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+%  Contribution by Erin Carson, University of California at Berkeley
 % -------------------------------------------------------------------------

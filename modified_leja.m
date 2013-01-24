@@ -196,5 +196,5 @@ function [y, outidx] = modified_leja(x, n, mults)
 end
 
 % -------------------------------------------------------------------------
-%  Copyright (2012, 2013)  Magnus Grandin <magnus.grandin@it.uu.se>
+%  Contribution by Erin Carson, University of California at Berkeley
 % -------------------------------------------------------------------------
